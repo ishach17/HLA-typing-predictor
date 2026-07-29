@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HLA Typing Predictor</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="app-view" id="view-home">
+      <header class="app-header">
+        <h1 class="app-title">HLA Typing Predictor</h1>
+        <p class="app-subtitle">Exploring HLA allele patterns and their studied associations</p>
+      </header>
+
+      <div class="section-grid" id="section-grid"></div>
+    </div>
+
+    <div class="app-view" id="view-single" hidden>
+      <button type="button" class="back-link" id="back-to-sections">
+        <span aria-hidden="true">&larr;</span> Back to sections
+      </button>
+
+      <div class="upload-cards">
+        <div class="upload-card-container" id="rpl-card-container"></div>
+        <div class="upload-card-container" id="control-card-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

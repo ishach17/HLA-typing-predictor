@@ -1,0 +1,548 @@
+:root {
+  --accent: #0078d4;
+  --bg: #faf9f8;
+  --card-bg: #ffffff;
+  --border: #e1dfdd;
+  --text-primary: #201f1e;
+  --text-secondary: #605e5c;
+  --radius: 4px;
+  --shadow: 0 1.6px 3.6px rgba(0, 0, 0, 0.09), 0 0.3px 0.9px rgba(0, 0, 0, 0.1);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Segoe UI Web", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+}
+
+/* The landing hub (header + section cards) reads best at the original,
+   narrower width; only the data-heavy Single upload page below needs the
+   full width the wider .app now provides. */
+.app-header,
+.section-grid {
+  width: 100%;
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.app-header {
+  position: relative;
+  margin-bottom: 24px;
+  padding: 8px 12px;
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(0, 120, 212, 0.06) 1.4px, transparent 1.4px);
+  background-size: 18px 18px;
+  pointer-events: none;
+}
+
+.app-title,
+.app-subtitle {
+  position: relative;
+}
+
+.app-title {
+  margin: 0 0 4px;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.app-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.app-view[hidden] {
+  display: none;
+}
+
+/* Landing grid: Single / Couple / KIR side by side */
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.section-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--section-accent, var(--accent));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 32px 24px;
+  min-height: 240px;
+}
+
+/* Per-section accent — drives the icon, its tinted circle, and the card's
+   top border. Badges are intentionally excluded so "In development" /
+   "Click to begin" stay visually neutral across all three cards. */
+.section-card--single {
+  --section-accent: #0078d4;
+  --section-tint: #eff6fc;
+}
+
+.section-card--couple {
+  --section-accent: #038387;
+  --section-tint: #e7f5f5;
+}
+
+.section-card--kir {
+  --section-accent: #5c2d91;
+  --section-tint: #f3edf9;
+}
+
+.section-card--clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.section-card--clickable:hover {
+  border-color: var(--section-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), 0 1.6px 3.6px rgba(0, 0, 0, 0.1);
+}
+
+.section-card--clickable:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.section-card-icon-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 6px;
+  background: var(--section-tint, #eff6fc);
+  border-radius: 50%;
+}
+
+.section-card-icon {
+  width: 34px;
+  height: 34px;
+  color: var(--section-accent, var(--accent));
+}
+
+.section-card-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.section-card-heading {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.section-card-description {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 260px;
+  line-height: 1.5;
+}
+
+.section-card-badge {
+  margin-top: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: #f3f2f1;
+  border-radius: 999px;
+}
+
+/* Single page starts higher up than the tab hub above it — it's a
+   data-review screen, not a landing page, so it doesn't need the same
+   breathing room at the top. */
+#view-single {
+  margin-top: -20px;
+}
+
+/* Back link (Single page breadcrumb) */
+.back-link {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  margin-bottom: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.back-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius);
+}
+
+/* Single page: RPL / Control upload cards */
+.upload-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Grid items default to a min-width based on their content's min-content
+   size, which lets a wide table force the whole column (and the page)
+   wider. Zeroing it out here hands sizing control back to the 1fr track,
+   so the table's own overflow-x:auto is what scrolls, not the page. */
+.upload-card-container {
+  min-width: 0;
+}
+
+.upload-card {
+  min-width: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.upload-card-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Compact horizontal bar rather than a large stacked drop target — this is
+   a small, secondary control sitting above the preview table, which is the
+   thing that actually needs the vertical room. */
+.dropzone {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone:hover,
+.dropzone.dropzone-active {
+  border-color: var(--accent);
+  background: #eff6fc;
+}
+
+.dropzone:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.dropzone-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.dropzone-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dropzone-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.dropzone-input {
+  display: none;
+}
+
+.upload-status-text {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.upload-status-text.is-error {
+  color: #d13438;
+}
+
+.preview-wrap {
+  margin-top: 10px;
+}
+
+.preview-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* Excel preview: many rows may exist, so scroll vertically within a bounded
+   height instead of growing the card to fit them all. Sized generously so
+   the default 25-row view is visible without scrolling on most desktop
+   screens; "Show all records" raises this further for bigger sheets. */
+.preview-table-wrap--scroll-y {
+  max-height: 1000px;
+  overflow-y: auto;
+}
+
+.preview-table-wrap--scroll-y .preview-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.preview-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.preview-table th,
+.preview-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.preview-table thead th {
+  background: var(--bg);
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.preview-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.preview-table td.allele-cell {
+  font-family: "Consolas", "SFMono-Regular", "Courier New", monospace;
+}
+
+.preview-table td.cell-warning {
+  background: #fff4ce;
+}
+
+.preview-table tr.row-error td {
+  background: #fdeded;
+}
+
+.preview-table tr.row-duplicate td {
+  background: #fff4ce;
+}
+
+.preview-table td.notes-cell {
+  white-space: normal;
+  min-width: 200px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.preview-clear-btn {
+  appearance: none;
+  margin-top: 12px;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.preview-clear-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.preview-clear-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.preview-remove-btn {
+  appearance: none;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #d13438;
+  background: transparent;
+  border: 1px solid #d13438;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.preview-remove-btn:hover {
+  background: #fdeded;
+}
+
+.preview-remove-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.preview-pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.preview-pager .preview-note {
+  margin: 0;
+}
+
+.preview-show-all-btn {
+  appearance: none;
+  padding: 2px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.preview-show-all-btn:hover {
+  text-decoration: underline;
+}
+
+.preview-show-all-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius);
+}
+
+/* Animation, respecting reduced motion preference */
+.app-view {
+  animation: fade-in 0.15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-view {
+    animation: none;
+  }
+
+  .section-card--clickable,
+  .dropzone {
+    transition: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive down to tablet width */
+@media (max-width: 768px) {
+  .app {
+    padding: 24px 16px 32px;
+  }
+
+  .app-title {
+    font-size: 24px;
+  }
+
+  .section-card {
+    padding: 28px 20px;
+    min-height: 220px;
+  }
+
+  .section-card-icon-circle {
+    width: 64px;
+    height: 64px;
+  }
+
+  .section-card-icon {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* The section grid and the two upload cards both need more room than
+   general tablet content before they get cramped, so they share a wider
+   breakpoint to stack early. */
+@media (max-width: 900px) {
+  .section-grid,
+  .upload-cards {
+    grid-template-columns: 1fr;
+  }
+}
