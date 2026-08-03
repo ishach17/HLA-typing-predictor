@@ -226,20 +226,21 @@ body {
   border-radius: var(--radius);
 }
 
-/* Single page: RPL / Control upload cards */
-.upload-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  width: 100%;
-  max-width: 100%;
+.single-page-heading {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-/* Grid items default to a min-width based on their content's min-content
-   size, which lets a wide table force the whole column (and the page)
-   wider. Zeroing it out here hands sizing control back to the 1fr track,
-   so the table's own overflow-x:auto is what scrolls, not the page. */
-.upload-card-container {
+/* Single page: one upload card. Capped narrower than the full page width so
+   it doesn't stretch edge-to-edge, but wider than a plain single-column
+   share of the old two-card layout, since the preview table underneath
+   still has a lot of columns to show. */
+.upload-area {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
   min-width: 0;
 }
 
@@ -453,6 +454,46 @@ body {
   box-shadow: var(--focus-ring);
 }
 
+/* Reference dataset comparison, shown below the extraction preview */
+.reference-comparison {
+  margin-top: 16px;
+}
+
+.reference-comparison + .reference-comparison {
+  margin-top: 12px;
+}
+
+.reference-comparison-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.reference-citation {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.classification-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+.classification-badge--high-risk {
+  background: #fdeded;
+  color: #d13438;
+}
+
+.classification-badge--protective {
+  background: #dff6dd;
+  color: #107c10;
+}
+
 .preview-pager {
   display: flex;
   align-items: center;
@@ -537,12 +578,10 @@ body {
   }
 }
 
-/* The section grid and the two upload cards both need more room than
-   general tablet content before they get cramped, so they share a wider
-   breakpoint to stack early. */
+/* The section grid needs more room than general tablet content before it
+   gets cramped, so it gets its own wider breakpoint to stack early. */
 @media (max-width: 900px) {
-  .section-grid,
-  .upload-cards {
+  .section-grid {
     grid-template-columns: 1fr;
   }
 }
