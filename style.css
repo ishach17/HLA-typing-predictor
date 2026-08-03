@@ -432,6 +432,34 @@ body {
   box-shadow: var(--focus-ring);
 }
 
+/* Primary-styled (accent-filled) so it reads as the meaningful export
+   action, distinct from the neutral "Clear all" / "Upload another file"
+   button it sits next to. */
+.export-results-btn {
+  appearance: none;
+  margin-top: 12px;
+  margin-right: 8px;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.export-results-btn:hover {
+  background: #106ebe;
+  border-color: #106ebe;
+}
+
+.export-results-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .preview-remove-btn {
   appearance: none;
   padding: 4px 10px;

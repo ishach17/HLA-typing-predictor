@@ -185,33 +185,55 @@
 
     // Match Female/Male regardless of whether the age number comes before or
     // after it ("Female / 24 Years" vs "33 Years/Female"), and regardless of
-    // whether the row label itself is "Age/Gender" or "Gender/Age".
+    // whether the row label itself is "Age/Gender" or "Gender/Age". Some
+    // templates label the row "Sex" instead of "Gender", and/or abbreviate
+    // the value to a bare "F"/"M" instead of spelling it out — both are
+    // accepted here too.
     const genderCandidates = candidateLinesFor(
       lines,
-      (l) => /gender/i.test(l),
-      (l) => /\b(Female|Male)\b/i.test(l)
+      (l) => /gender|sex/i.test(l),
+      (l) => /\b(Female|Male|F|M)\b/i.test(l)
     );
     let genderMatches = [];
     let genderSourceLine = "";
     for (const candidate of genderCandidates) {
-      const candidateMatches = [...candidate.matchAll(/\b(Female|Male)\b/gi)].map((m) => m[1].toLowerCase());
+      const candidateMatches = [...candidate.matchAll(/\b(Female|Male|F|M)\b/gi)].map((m) => {
+        const token = m[1].toLowerCase();
+        return token === "f" ? "female" : token === "m" ? "male" : token;
+      });
       if (candidateMatches.length > genderMatches.length) {
         genderMatches = candidateMatches;
         genderSourceLine = candidate;
       }
     }
 
+    // A relationship reference embedded in the same field (e.g. "Mrs. Priya
+    // D/O Mr. Ramesh") carries a second title word for a guardian/relative,
+    // not a second patient — without this, that title gets mistaken for
+    // another person's name and inflates the detected patient count.
+    const RELATIONSHIP_MARKER = /(?:S\/O|D\/O|W\/O|C\/O)/i;
+    const isGuardianTitle = (text, titleIndex) =>
+      RELATIONSHIP_MARKER.test(text.slice(Math.max(0, titleIndex - 10), titleIndex));
+
     const nameCandidates = candidateLinesFor(lines, (l) => /\bname\b/i.test(l), (l) => TITLE_TEST.test(l));
     let names = [];
     if (nameCandidates.length) {
       for (const candidate of nameCandidates) {
         const stripped = candidate.replace(/^.*?\bname\s*/i, "");
-        const titleIdxs = [...stripped.matchAll(TITLE_REGEX)].map((m) => m.index);
+        const titleIdxs = [...stripped.matchAll(TITLE_REGEX)]
+          .filter((m) => !isGuardianTitle(stripped, m.index))
+          .map((m) => m.index);
         const candidateNames = [];
         for (let i = 0; i < titleIdxs.length; i++) {
           const start = titleIdxs[i];
           const end = i + 1 < titleIdxs.length ? titleIdxs[i + 1] : stripped.length;
-          candidateNames.push(stripped.slice(start, end).trim());
+          // Trim off any relationship reference (and whatever guardian
+          // name/title follows it) that this patient's own segment
+          // absorbed, now that it's no longer treated as a boundary.
+          let segment = stripped.slice(start, end);
+          const stopMatch = segment.match(/\s+(?:S\/O|D\/O|W\/O|C\/O)\b/i);
+          if (stopMatch) segment = segment.slice(0, stopMatch.index);
+          candidateNames.push(segment.trim());
         }
         if (!candidateNames.length && stripped.trim()) candidateNames.push(stripped.trim());
         if (candidateNames.length > names.length) names = candidateNames;
@@ -302,6 +324,42 @@
     }
 
     return { name, gender, age, alleles, warnings };
+  }
+
+  // ---- Sample Number extraction (additive — a separate, self-contained
+  // reader over the same `lines` extractLinesFromPdf() already produces;
+  // does not read from or modify parseRplReport itself). Needed for the
+  // RPL_Results.xlsx export below, which parseRplReport's own return value
+  // doesn't carry. Re-derives which column is the female patient's the
+  // same way parseRplReport does, since that isn't exposed externally. ----
+  function extractSampleNumber(lines) {
+    const genderCandidates = candidateLinesFor(
+      lines,
+      (l) => /gender/i.test(l),
+      (l) => /\b(Female|Male)\b/i.test(l)
+    );
+    let genderMatches = [];
+    for (const candidate of genderCandidates) {
+      const candidateMatches = [...candidate.matchAll(/\b(Female|Male)\b/gi)].map((m) => m[1].toLowerCase());
+      if (candidateMatches.length > genderMatches.length) genderMatches = candidateMatches;
+    }
+    let femaleIndex = genderMatches.findIndex((g) => g === "female");
+    if (femaleIndex === -1) femaleIndex = 0;
+
+    const sampleCandidates = candidateLinesFor(
+      lines,
+      (l) => /sample\s*number/i.test(l),
+      (l) => /\d{4,}/.test(l)
+    );
+    let sampleNumbers = [];
+    for (const candidate of sampleCandidates) {
+      const nums = [...candidate.matchAll(/\b\d{4,}\b/g)].map((m) => m[0]);
+      if (nums.length > sampleNumbers.length) sampleNumbers = nums;
+    }
+
+    return sampleNumbers.length
+      ? sampleNumbers[Math.min(femaleIndex, sampleNumbers.length - 1)] || sampleNumbers[0]
+      : "";
   }
 
   // ---- Reference dataset comparison (additive — does not read from or
@@ -513,7 +571,10 @@
     const parsed = parseRplReport(lines);
     const fieldKeys = ["name", "gender", "age", ...ALLELE_FIELD_KEYS];
     const values = [parsed.name, parsed.gender, parsed.age, ...ALLELE_FIELD_KEYS.map((k) => parsed.alleles[k])];
-    return { people: [{ values, fieldKeys, warnings: parsed.warnings }] };
+    // sampleNumber is additive: it's not part of the main preview table's
+    // columns (RPL_COLUMNS/values/fieldKeys above are untouched), only used
+    // by the RPL_Results.xlsx export.
+    return { people: [{ values, fieldKeys, warnings: parsed.warnings }], sampleNumber: extractSampleNumber(lines) };
   }
 
   async function processControlPdfFile(file) {
@@ -662,6 +723,11 @@
     return nameIdx !== -1 ? formatExcelCellValue(row[nameIdx]) : "";
   }
 
+  function sampleNumberFromExcelRow(headers, row) {
+    const idx = headers.findIndex((h) => /sample\s*number/i.test(String(h || "")));
+    return idx !== -1 ? formatExcelCellValue(row[idx]) : "";
+  }
+
   function renderReferenceComparison({ alleles, name }) {
     const wrap = document.createElement("div");
     wrap.className = "reference-comparison";
@@ -730,6 +796,44 @@
     wrap.appendChild(citation);
 
     return wrap;
+  }
+
+  // ---- RPL_Results.xlsx export (additive — a brand-new, standalone
+  // workbook built and downloaded entirely client-side via the SheetJS
+  // APIs already used for the Excel-upload path; never touches whatever
+  // workbook a user may have connected elsewhere, since there's no
+  // connected-workbook concept in this app at all) ----
+
+  const RPL_RESULTS_HEADERS = ["Patient Name", "Sample Number", "Allele", "Classification", "Frequency"];
+
+  // patients: array of { name, sampleNumber, alleles }. One row per matched
+  // allele; a patient with no matches still gets one row with "-" placeholders.
+  function buildRplResultsRows(patients) {
+    const rows = [];
+    patients.forEach((patient) => {
+      const matches = compareToReference(patient.alleles, RPL_REFERENCE_DATA);
+      if (!matches.length) {
+        rows.push([patient.name || "", patient.sampleNumber || "", "-", "-", "-"]);
+        return;
+      }
+      matches.forEach((match) => {
+        rows.push([
+          patient.name || "",
+          patient.sampleNumber || "",
+          match.allele,
+          classificationLabel(match.classification),
+          `${(match.referenceFrequency * 100).toFixed(2)}%`,
+        ]);
+      });
+    });
+    return rows;
+  }
+
+  function downloadRplResults(patients) {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([RPL_RESULTS_HEADERS, ...buildRplResultsRows(patients)]);
+    XLSX.utils.book_append_sheet(wb, ws, "Results");
+    XLSX.writeFile(wb, "RPL_Results.xlsx");
   }
 
   // ---- Upload card UI ----
@@ -888,8 +992,11 @@
       previewWrap.appendChild(tableWrap);
 
       // Additive: a reference comparison table per successfully-parsed
-      // report, shown below the (unmodified) extraction preview above.
+      // report, shown below the (unmodified) extraction preview above, plus
+      // one "Export Results" button covering every patient uploaded so far
+      // in this card's session (not just the latest upload).
       if (compareReference) {
+        const patients = [];
         pdfReports.forEach((report) => {
           const person = report.result.people[0];
           const hasGeneral = person.warnings.some((w) => w.type === "general");
@@ -897,7 +1004,21 @@
           previewWrap.appendChild(
             renderReferenceComparison({ alleles: allelesFromPerson(person), name: personName(person) })
           );
+          patients.push({
+            name: personName(person),
+            sampleNumber: report.result.sampleNumber || "",
+            alleles: allelesFromPerson(person),
+          });
         });
+
+        if (patients.length) {
+          const exportBtn = document.createElement("button");
+          exportBtn.type = "button";
+          exportBtn.className = "export-results-btn";
+          exportBtn.textContent = "Export Results";
+          exportBtn.addEventListener("click", () => downloadRplResults(patients));
+          previewWrap.appendChild(exportBtn);
+        }
       }
 
       const summary = document.createElement("p");
@@ -957,6 +1078,8 @@
       // unrelated sheet doesn't get spammed with "No matches found." rows.
       // Follows the same visible-row set as the table above (respects
       // "Show all records"), so this doesn't balloon the page by default.
+      // The export button below still covers every row in the sheet, not
+      // just the ones currently displayed.
       if (compareReference && excelSheet.headers.some((h) => normalizeAlleleHeader(h))) {
         visibleRows.forEach((row) => {
           previewWrap.appendChild(
@@ -966,6 +1089,20 @@
             })
           );
         });
+
+        const exportBtn = document.createElement("button");
+        exportBtn.type = "button";
+        exportBtn.className = "export-results-btn";
+        exportBtn.textContent = "Export Results";
+        exportBtn.addEventListener("click", () => {
+          const patients = excelSheet.rows.map((row) => ({
+            name: nameFromExcelRow(excelSheet.headers, row),
+            sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
+            alleles: allelesFromExcelRow(excelSheet.headers, row),
+          }));
+          downloadRplResults(patients);
+        });
+        previewWrap.appendChild(exportBtn);
       }
 
       if (totalRows > EXCEL_ROW_LIMIT) {
