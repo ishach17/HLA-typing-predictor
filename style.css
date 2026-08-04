@@ -528,12 +528,6 @@ body {
   color: var(--text-primary);
 }
 
-.reference-citation {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
 .classification-badge {
   display: inline-block;
   padding: 2px 10px;

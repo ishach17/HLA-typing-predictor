@@ -744,13 +744,17 @@
     return idx !== -1 ? formatExcelCellValue(row[idx]) : "";
   }
 
-  function renderReferenceComparison({ alleles, name }) {
+  function renderReferenceComparison({ alleles, name, age }) {
     const wrap = document.createElement("div");
     wrap.className = "reference-comparison";
 
+    // Matches the "Patient Name (Age)" convention already used in the
+    // extraction preview above, so the two stay visually consistent.
+    const nameWithAge = name && age ? `${name} (${age})` : name;
+
     const title = document.createElement("h4");
     title.className = "reference-comparison-title";
-    title.textContent = name ? `Reference Data Comparison — ${name}` : "Reference Data Comparison";
+    title.textContent = nameWithAge ? `Reference Data Comparison — ${nameWithAge}` : "Reference Data Comparison";
     wrap.appendChild(title);
 
     const tableWrap = document.createElement("div");
@@ -805,11 +809,6 @@
     table.appendChild(tbody);
     tableWrap.appendChild(table);
     wrap.appendChild(tableWrap);
-
-    const citation = document.createElement("p");
-    citation.className = "reference-citation";
-    citation.textContent = "Reference: Shetty et al., 2024, J Reprod Immunol 163:104225";
-    wrap.appendChild(citation);
 
     return wrap;
   }
@@ -1052,7 +1051,11 @@
           const hasGeneral = person.warnings.some((w) => w.type === "general");
           if (hasGeneral) return;
           previewWrap.appendChild(
-            renderReferenceComparison({ alleles: allelesFromPerson(person), name: personName(person) })
+            renderReferenceComparison({
+              alleles: allelesFromPerson(person),
+              name: personName(person),
+              age: personAge(person),
+            })
           );
           patients.push({
             name: personName(person),
@@ -1137,6 +1140,7 @@
             renderReferenceComparison({
               alleles: allelesFromExcelRow(excelSheet.headers, row),
               name: nameFromExcelRow(excelSheet.headers, row),
+              age: ageFromExcelRow(excelSheet.headers, row),
             })
           );
         });
