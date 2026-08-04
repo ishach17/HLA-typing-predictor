@@ -571,10 +571,16 @@
     const parsed = parseRplReport(lines);
     const fieldKeys = ["name", "gender", "age", ...ALLELE_FIELD_KEYS];
     const values = [parsed.name, parsed.gender, parsed.age, ...ALLELE_FIELD_KEYS.map((k) => parsed.alleles[k])];
-    // sampleNumber is additive: it's not part of the main preview table's
-    // columns (RPL_COLUMNS/values/fieldKeys above are untouched), only used
-    // by the RPL_Results.xlsx export.
-    return { people: [{ values, fieldKeys, warnings: parsed.warnings }], sampleNumber: extractSampleNumber(lines) };
+    // sampleNumber/rawLines are additive: neither is part of the main
+    // preview table's columns (RPL_COLUMNS/values/fieldKeys above are
+    // untouched) — sampleNumber feeds the RPL_Results.xlsx export, rawLines
+    // feeds the "View Raw Text" debug button so parsing issues on a
+    // specific file can be diagnosed without modifying parseRplReport.
+    return {
+      people: [{ values, fieldKeys, warnings: parsed.warnings }],
+      sampleNumber: extractSampleNumber(lines),
+      rawLines: lines.join("\n"),
+    };
   }
 
   async function processControlPdfFile(file) {
@@ -697,6 +703,11 @@
     return nameIdx !== -1 ? person.values[nameIdx] : "";
   }
 
+  function personAge(person) {
+    const ageIdx = person.fieldKeys.indexOf("age");
+    return ageIdx !== -1 ? person.values[ageIdx] : "";
+  }
+
   // Recognizes an Excel column header as an allele field — "A/1", "DRB1/2",
   // and the "HLA-" prefixed form some sheets use (e.g. "HLA-A/1") — and maps
   // it to the same "LOCUS/N" key parseRplReport()'s alleles object uses.
@@ -725,6 +736,11 @@
 
   function sampleNumberFromExcelRow(headers, row) {
     const idx = headers.findIndex((h) => /sample\s*number/i.test(String(h || "")));
+    return idx !== -1 ? formatExcelCellValue(row[idx]) : "";
+  }
+
+  function ageFromExcelRow(headers, row) {
+    const idx = headers.findIndex((h) => /^age$/i.test(String(h || "").trim()));
     return idx !== -1 ? formatExcelCellValue(row[idx]) : "";
   }
 
@@ -804,22 +820,24 @@
   // workbook a user may have connected elsewhere, since there's no
   // connected-workbook concept in this app at all) ----
 
-  const RPL_RESULTS_HEADERS = ["Patient Name", "Sample Number", "Allele", "Classification", "Frequency"];
+  const RPL_RESULTS_HEADERS = ["Patient Name", "Age", "Allele", "Classification", "Frequency"];
 
-  // patients: array of { name, sampleNumber, alleles }. One row per matched
-  // allele; a patient with no matches still gets one row with "-" placeholders.
+  // patients: array of { name, age, sampleNumber, alleles } — sampleNumber
+  // isn't included in the export output, only name/age/alleles are. One row
+  // per matched allele; a patient with no matches still gets one row with
+  // "-" placeholders.
   function buildRplResultsRows(patients) {
     const rows = [];
     patients.forEach((patient) => {
       const matches = compareToReference(patient.alleles, RPL_REFERENCE_DATA);
       if (!matches.length) {
-        rows.push([patient.name || "", patient.sampleNumber || "", "-", "-", "-"]);
+        rows.push([patient.name || "", patient.age || "", "-", "-", "-"]);
         return;
       }
       matches.forEach((match) => {
         rows.push([
           patient.name || "",
-          patient.sampleNumber || "",
+          patient.age || "",
           match.allele,
           classificationLabel(match.classification),
           `${(match.referenceFrequency * 100).toFixed(2)}%`,
@@ -935,9 +953,16 @@
       const table = document.createElement("table");
       table.className = "preview-table";
 
+      // Display-only: Age is folded into the "Patient Name" cell/header
+      // instead of its own column. The underlying columns/fieldKeys/values
+      // arrays are untouched (still include "age" at its usual position),
+      // so duplicate detection, reference comparison, and export — which
+      // all read those arrays — are unaffected by this rendering choice.
+      const headerColumns = columns.map((c) => (c === "Patient Name" ? "Patient Name (Age)" : c)).filter((c) => c !== "Age");
+
       const thead = document.createElement("thead");
       const headRow = document.createElement("tr");
-      [...columns, "Notes", ""].forEach((c) => {
+      [...headerColumns, "Notes", ""].forEach((c) => {
         const th = document.createElement("th");
         th.textContent = c;
         headRow.appendChild(th);
@@ -954,16 +979,24 @@
         if (hasGeneral) tr.classList.add("row-error");
         else if (hasDuplicate) tr.classList.add("row-duplicate");
 
+        const ageIdx = person.fieldKeys.indexOf("age");
+        const ageVal = ageIdx !== -1 ? person.values[ageIdx] : "";
+        const ageMissing = person.warnings.some((w) => w.field === "age" && w.type === "missing");
+
         person.values.forEach((val, i) => {
-          const td = document.createElement("td");
           const fieldKey = person.fieldKeys[i];
+          if (fieldKey === "age") return; // folded into the "name" cell instead of its own column
+
+          const td = document.createElement("td");
           const baseKey = fieldKey && fieldKey.includes("/") ? fieldKey.split("/")[0] : fieldKey;
-          const warned = person.warnings.some(
-            (w) => (w.field === fieldKey || w.field === baseKey) && w.type === "missing"
-          );
+          const warned =
+            person.warnings.some((w) => (w.field === fieldKey || w.field === baseKey) && w.type === "missing") ||
+            (fieldKey === "name" && ageMissing);
           if (warned) td.classList.add("cell-warning");
           if (fieldKey && fieldKey.includes("/")) td.classList.add("allele-cell");
-          td.textContent = val || "—";
+
+          const displayVal = fieldKey === "name" && ageVal ? `${val || "—"} (${ageVal})` : val;
+          td.textContent = displayVal || "—";
           tr.appendChild(td);
         });
 
@@ -973,6 +1006,23 @@
         tr.appendChild(notesTd);
 
         const actionTd = document.createElement("td");
+        actionTd.className = "action-cell";
+
+        if (report.result.rawLines) {
+          const viewRawBtn = document.createElement("button");
+          viewRawBtn.type = "button";
+          viewRawBtn.className = "preview-viewraw-btn";
+          viewRawBtn.textContent = "View Raw Text";
+          viewRawBtn.title = "Shows the exact text the PDF reader extracted, for debugging";
+          viewRawBtn.addEventListener("click", () => {
+            window.prompt(
+              "Raw extracted text — select all (Ctrl/Cmd+A) and copy to share for debugging:",
+              report.result.rawLines
+            );
+          });
+          actionTd.appendChild(viewRawBtn);
+        }
+
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
         removeBtn.className = "preview-remove-btn";
@@ -1006,6 +1056,7 @@
           );
           patients.push({
             name: personName(person),
+            age: personAge(person),
             sampleNumber: report.result.sampleNumber || "",
             alleles: allelesFromPerson(person),
           });
@@ -1097,6 +1148,7 @@
         exportBtn.addEventListener("click", () => {
           const patients = excelSheet.rows.map((row) => ({
             name: nameFromExcelRow(excelSheet.headers, row),
+            age: ageFromExcelRow(excelSheet.headers, row),
             sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
             alleles: allelesFromExcelRow(excelSheet.headers, row),
           }));

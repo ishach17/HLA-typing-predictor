@@ -482,6 +482,36 @@ body {
   box-shadow: var(--focus-ring);
 }
 
+.preview-table td.action-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  white-space: normal;
+}
+
+.preview-viewraw-btn {
+  appearance: none;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.preview-viewraw-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.preview-viewraw-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 /* Reference dataset comparison, shown below the extraction preview */
 .reference-comparison {
   margin-top: 16px;
