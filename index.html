@@ -7,24 +7,38 @@
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="app">
-    <div class="app-view" id="view-home">
-      <header class="app-header">
-        <h1 class="app-title">HLA Typing Predictor - NGS</h1>
-        <p class="app-subtitle">Exploring HLA allele patterns and their studied associations</p>
+  <div class="app-shell">
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo" id="sidebar-logo"></div>
+        <h1 class="sidebar-title">HLA Typing Predictor</h1>
+        <p class="sidebar-subtitle">Exploring HLA allele patterns and their studied associations</p>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebar-nav" aria-label="Analysis sections"></nav>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-topbar">
+        <span class="topbar-page-title" id="topbar-page-title">Analysis Selection</span>
       </header>
 
-      <div class="section-grid" id="section-grid"></div>
-    </div>
+      <main class="app-content">
+        <div class="app-view" id="view-home">
+          <h2 class="content-hero-title">Analysis Selection</h2>
+          <div class="section-grid" id="section-grid"></div>
+        </div>
 
-    <div class="app-view" id="view-single" hidden>
-      <button type="button" class="back-link" id="back-to-sections">
-        <span aria-hidden="true">&larr;</span> Back to sections
-      </button>
+        <div class="app-view" id="view-single" hidden>
+          <button type="button" class="back-link" id="back-to-sections">
+            <span aria-hidden="true">&larr;</span> Back to sections
+          </button>
 
-      <h2 class="single-page-heading">RPL Predictor</h2>
+          <h2 class="single-page-heading">RPL Predictor</h2>
 
-      <div class="upload-area" id="upload-area-container"></div>
+          <div class="upload-area" id="upload-area-container"></div>
+        </div>
+      </main>
     </div>
   </div>
 

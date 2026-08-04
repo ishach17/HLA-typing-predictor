@@ -26,103 +26,204 @@ body {
   color: var(--text-primary);
 }
 
-.app {
+/* ---- App shell: persistent sidebar + main content area ---- */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-sidebar {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  max-width: 1680px;
-  margin: 0 auto;
-  padding: 32px 24px 48px;
+  flex-shrink: 0;
+  width: 260px;
+  padding: 28px 20px;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border);
 }
 
-/* The landing hub (header + section cards) reads best at the original,
-   narrower width; only the data-heavy Single upload page below needs the
-   full width the wider .app now provides. */
-.app-header,
-.section-grid {
-  width: 100%;
-  max-width: 960px;
-  margin-left: auto;
-  margin-right: auto;
+.sidebar-brand {
+  text-align: center;
+  margin-bottom: 32px;
 }
 
-.app-header {
-  position: relative;
-  margin-bottom: 24px;
-  padding: 8px 12px;
-  overflow: hidden;
-  border-radius: var(--radius);
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
+  background: #eff6fc;
+  border-radius: 50%;
+  color: var(--accent);
 }
 
-.app-header::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(0, 120, 212, 0.06) 1.4px, transparent 1.4px);
-  background-size: 18px 18px;
-  pointer-events: none;
+.sidebar-logo svg {
+  width: 28px;
+  height: 28px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.app-title,
-.app-subtitle {
-  position: relative;
-}
-
-.app-title {
+.sidebar-title {
   margin: 0 0 4px;
-  font-size: 28px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
-.app-subtitle {
+.sidebar-subtitle {
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text-secondary);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.sidebar-nav-item:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.sidebar-nav-item.is-active {
+  background: #eff6fc;
+  color: var(--accent);
+}
+
+.sidebar-nav-item:disabled {
+  color: #c8c6c4;
+  cursor: not-allowed;
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.sidebar-nav-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.app-topbar {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 32px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-page-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.app-content {
+  flex: 1;
+  padding: 32px;
 }
 
 .app-view[hidden] {
   display: none;
 }
 
+.content-hero-title {
+  margin: 0 0 24px;
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 /* Landing grid: Single / Couple / KIR side by side */
 .section-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  gap: 20px;
+  max-width: 1200px;
 }
 
 .section-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  gap: 8px;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-top: 3px solid var(--section-accent, var(--accent));
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 32px 24px;
-  min-height: 240px;
+  padding: 28px 24px;
+  min-height: 260px;
 }
 
-/* Per-section accent — drives the icon, its tinted circle, and the card's
-   top border. Badges are intentionally excluded so "In development" /
-   "Click to begin" stay visually neutral across all three cards. */
+/* Only the one real, available section gets an accent — everything else
+   stays neutral gray so "Coming Soon" reads as genuinely inactive rather
+   than just a different flavor of active. */
 .section-card--single {
-  --section-accent: #0078d4;
-  --section-tint: #eff6fc;
+  border-top: 3px solid var(--accent);
 }
 
-.section-card--couple {
-  --section-accent: #038387;
-  --section-tint: #e7f5f5;
+.section-card--single .section-card-icon-circle {
+  background: #eff6fc;
+  color: var(--accent);
 }
 
-.section-card--kir {
-  --section-accent: #5c2d91;
-  --section-tint: #f3edf9;
+.section-card--couple .section-card-icon-circle,
+.section-card--kir .section-card-icon-circle {
+  background: #f3f2f1;
+  color: var(--text-secondary);
 }
 
 .section-card--clickable {
@@ -131,7 +232,7 @@ body {
 }
 
 .section-card--clickable:hover {
-  border-color: var(--section-accent);
+  border-color: var(--accent);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), 0 1.6px 3.6px rgba(0, 0, 0, 0.1);
 }
 
@@ -140,21 +241,31 @@ body {
   box-shadow: var(--focus-ring);
 }
 
+.section-card-tag {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: #f3f2f1;
+  border-radius: 999px;
+}
+
 .section-card-icon-circle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 76px;
-  height: 76px;
-  margin-bottom: 6px;
-  background: var(--section-tint, #eff6fc);
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
   border-radius: 50%;
 }
 
 .section-card-icon {
-  width: 34px;
-  height: 34px;
-  color: var(--section-accent, var(--accent));
+  width: 26px;
+  height: 26px;
 }
 
 .section-card-icon svg {
@@ -169,8 +280,8 @@ body {
 
 .section-card-heading {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -178,25 +289,45 @@ body {
   margin: 0;
   font-size: 14px;
   color: var(--text-secondary);
-  max-width: 260px;
   line-height: 1.5;
 }
 
-.section-card-badge {
-  margin-top: 6px;
-  padding: 4px 12px;
-  font-size: 12px;
+.section-card-cta {
+  appearance: none;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  font-family: inherit;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--text-secondary);
-  background: #f3f2f1;
-  border-radius: 999px;
+  border-radius: var(--radius);
+  cursor: pointer;
 }
 
-/* Single page starts higher up than the tab hub above it — it's a
-   data-review screen, not a landing page, so it doesn't need the same
-   breathing room at the top. */
+.section-card--single .section-card-cta {
+  color: #ffffff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.section-card--single .section-card-cta:hover {
+  background: #106ebe;
+  border-color: #106ebe;
+}
+
+.section-card-cta:disabled {
+  color: var(--text-secondary);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  cursor: not-allowed;
+}
+
+/* Single page starts higher up than the content area's default padding —
+   it's a data-review screen, not a landing page, so it doesn't need the
+   same breathing room at the top. */
 #view-single {
-  margin-top: -20px;
+  margin-top: -12px;
 }
 
 /* Back link (Single page breadcrumb) */
@@ -606,33 +737,74 @@ body {
 
 /* Responsive down to tablet width */
 @media (max-width: 768px) {
-  .app {
-    padding: 24px 16px 32px;
+  .app-content {
+    padding: 20px 16px;
   }
 
-  .app-title {
+  .content-hero-title {
     font-size: 24px;
   }
 
   .section-card {
-    padding: 28px 20px;
+    padding: 24px 20px;
     min-height: 220px;
   }
 
   .section-card-icon-circle {
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
   }
 
   .section-card-icon {
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
   }
 }
 
-/* The section grid needs more room than general tablet content before it
-   gets cramped, so it gets its own wider breakpoint to stack early. */
+/* The sidebar and section grid both need more room than general tablet
+   content before they get cramped, so they share a wider breakpoint: the
+   sidebar collapses to a horizontal bar above the content instead of a
+   fixed-width column, and the grid stacks to a single column. */
 @media (max-width: 900px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .app-sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 20px;
+    padding: 16px 20px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 0;
+    text-align: left;
+  }
+
+  .sidebar-logo {
+    margin: 0;
+  }
+
+  .sidebar-subtitle {
+    display: none;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex: 1;
+  }
+
+  .sidebar-nav-item {
+    width: auto;
+  }
+
   .section-grid {
     grid-template-columns: 1fr;
   }

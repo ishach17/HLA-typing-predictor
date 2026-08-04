@@ -38,35 +38,36 @@
 
   // ---- Landing grid: Single / Couple / KIR cards, shown together ----
   // Each entry describes one card; only Single is interactive right now, so
-  // it's the only one with an onClick. Swap in real content per section
-  // later without touching how the grid itself is built.
+  // it's the only one with an onClick (and the only one shown as "active" in
+  // the sidebar). Swap in real content per section later without touching
+  // how the grid/sidebar are built.
 
   const SECTIONS = [
     {
       key: "single",
       icon: ICONS.single,
-      heading: "Single",
+      heading: "Single Analysis",
       description: "Upload RPL and Control reports for individual HLA analysis.",
-      badge: "Click to begin",
+      ctaLabel: "Get Started",
       onClick: goToSinglePage,
     },
     {
       key: "couple",
       icon: ICONS.couple,
-      heading: "Couple",
+      heading: "Couple Analysis",
       description: "Compare HLA allele patterns between two individuals and their studied associations.",
-      badge: "In development",
+      ctaLabel: "In Development",
     },
     {
       key: "kir",
       icon: ICONS.kir,
-      heading: "KIR",
+      heading: "KIR Analysis",
       description: "Analyze KIR gene patterns and their studied associations with HLA ligands.",
-      badge: "In development",
+      ctaLabel: "In Development",
     },
   ];
 
-  function renderSectionCard({ key, icon, heading, description, badge, onClick }) {
+  function renderSectionCard({ key, icon, heading, description, ctaLabel, onClick }) {
     const card = document.createElement("div");
     card.className = `section-card section-card--${key}${onClick ? " section-card--clickable" : ""}`;
     if (onClick) {
@@ -74,13 +75,18 @@
       card.tabIndex = 0;
     }
 
+    const tagHtml = onClick ? "" : `<span class="section-card-tag">Coming Soon</span>`;
+    const ctaDisabledAttr = onClick ? "" : " disabled";
+    const ctaArrow = onClick ? ` <span aria-hidden="true">&rarr;</span>` : "";
+
     card.innerHTML = `
+      ${tagHtml}
       <div class="section-card-icon-circle">
         <div class="section-card-icon">${icon}</div>
       </div>
       <h2 class="section-card-heading">${heading}</h2>
       <p class="section-card-description">${description}</p>
-      <span class="section-card-badge">${badge}</span>
+      <button type="button" class="section-card-cta" tabindex="-1"${ctaDisabledAttr}>${ctaLabel}${ctaArrow}</button>
     `;
 
     if (onClick) {
@@ -99,6 +105,31 @@
   function renderSectionGrid() {
     const grid = document.getElementById("section-grid");
     SECTIONS.forEach((section) => grid.appendChild(renderSectionCard(section)));
+  }
+
+  // ---- Sidebar navigation ----
+  // Mirrors SECTIONS: Single is the only real, clickable destination; Couple
+  // and KIR are shown but disabled, matching their "Coming Soon" card state
+  // instead of pretending they lead somewhere.
+
+  function renderSidebarNav() {
+    const nav = document.getElementById("sidebar-nav");
+    SECTIONS.forEach((section) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = `sidebar-nav-item${section.onClick ? " is-active" : ""}`;
+      item.innerHTML = `<span class="sidebar-nav-icon">${section.icon}</span><span>${section.heading}</span>`;
+      if (section.onClick) {
+        item.addEventListener("click", section.onClick);
+      } else {
+        item.disabled = true;
+      }
+      nav.appendChild(item);
+    });
+  }
+
+  function renderSidebarLogo() {
+    document.getElementById("sidebar-logo").innerHTML = ICONS.single;
   }
 
   // ---- Single page: PDF upload + real extraction (ported from the HLA
@@ -1333,11 +1364,15 @@
   const viewHome = document.getElementById("view-home");
   const viewSingle = document.getElementById("view-single");
   const backToSections = document.getElementById("back-to-sections");
+  const topbarPageTitle = document.getElementById("topbar-page-title");
+
+  const PAGE_TITLES = { "view-home": "Analysis Selection", "view-single": "RPL Predictor" };
 
   function showView(view) {
     [viewHome, viewSingle].forEach((candidate) => {
       candidate.hidden = candidate !== view;
     });
+    topbarPageTitle.textContent = PAGE_TITLES[view.id] || "";
   }
 
   function goToSinglePage() {
@@ -1351,6 +1386,8 @@
 
   backToSections.addEventListener("click", goToHomeView);
 
-  // Initial render: all three landing cards, shown together.
+  // Initial render: sidebar chrome, then all three landing cards together.
+  renderSidebarLogo();
+  renderSidebarNav();
   renderSectionGrid();
 })();
