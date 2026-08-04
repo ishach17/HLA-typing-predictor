@@ -824,7 +824,9 @@
   // patients: array of { name, age, sampleNumber, alleles } — sampleNumber
   // isn't included in the export output, only name/age/alleles are. One row
   // per matched allele; a patient with no matches still gets one row with
-  // "-" placeholders.
+  // "-" placeholders. Name/Age are only written on that patient's first
+  // row — repeating them on every subsequent allele row for the same
+  // patient is just noise once you're scanning down the sheet.
   function buildRplResultsRows(patients) {
     const rows = [];
     patients.forEach((patient) => {
@@ -833,10 +835,10 @@
         rows.push([patient.name || "", patient.age || "", "-", "-", "-"]);
         return;
       }
-      matches.forEach((match) => {
+      matches.forEach((match, matchIdx) => {
         rows.push([
-          patient.name || "",
-          patient.age || "",
+          matchIdx === 0 ? patient.name || "" : "",
+          matchIdx === 0 ? patient.age || "" : "",
           match.allele,
           classificationLabel(match.classification),
           `${(match.referenceFrequency * 100).toFixed(2)}%`,
