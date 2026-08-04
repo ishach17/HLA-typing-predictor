@@ -323,23 +323,23 @@ body {
   cursor: not-allowed;
 }
 
-/* Single page starts higher up than the content area's default padding —
-   it's a data-review screen, not a landing page, so it doesn't need the
-   same breathing room at the top. */
-#view-single {
-  margin-top: -12px;
+/* Single page breadcrumb */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
 }
 
-/* Back link (Single page breadcrumb) */
 .back-link {
   appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-bottom: 8px;
   background: transparent;
   border: none;
   padding: 4px;
-  margin-bottom: 10px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -357,22 +357,44 @@ body {
   border-radius: var(--radius);
 }
 
-.single-page-heading {
-  margin: 0 0 16px;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
+.breadcrumb-sep {
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
-/* Single page: one upload card. Capped narrower than the full page width so
-   it doesn't stretch edge-to-edge, but wider than a plain single-column
-   share of the old two-card layout, since the preview table underneath
-   still has a lot of columns to show. */
-.upload-area {
-  width: 100%;
-  max-width: 1100px;
-  margin: 0 auto;
-  min-width: 0;
+/* Third breadcrumb step, toggling the Single page between its two states:
+   upload and preview/export. Only ever one is visible at a time, so this
+   also doubles as the way back to re-open the upload UI once it's hidden. */
+.breadcrumb-step {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.breadcrumb-step:hover {
+  color: var(--accent);
+}
+
+.breadcrumb-step.is-active {
+  color: var(--accent);
+}
+
+.breadcrumb-step:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius);
+}
+
+/* Single page: upload step and preview/export step share the same column;
+   only one of the two is ever visible at a time. */
+.single-page-grid {
+  display: block;
 }
 
 .upload-card {
@@ -381,16 +403,56 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 16px;
+  padding: 20px;
 }
 
 .upload-card-title {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.input-panel .upload-card-title {
+  margin-bottom: 16px;
+}
+
+/* Results panel header: title + subtitle + Export All action */
+.results-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.results-panel-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.results-panel-subtitle {
+  margin: 0;
+  font-size: 13px;
   color: var(--text-secondary);
+}
+
+.results-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.results-panel-actions .export-results-btn {
+  margin: 0;
+}
+
+.results-empty-state {
+  margin: 40px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 /* Compact horizontal bar rather than a large stacked drop target — this is
@@ -470,21 +532,6 @@ body {
   border-radius: var(--radius);
 }
 
-/* Excel preview: many rows may exist, so scroll vertically within a bounded
-   height instead of growing the card to fit them all. Sized generously so
-   the default 25-row view is visible without scrolling on most desktop
-   screens; "Show all records" raises this further for bigger sheets. */
-.preview-table-wrap--scroll-y {
-  max-height: 1000px;
-  overflow-y: auto;
-}
-
-.preview-table-wrap--scroll-y .preview-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
 .preview-note {
   margin: 8px 0 0;
   font-size: 12px;
@@ -520,16 +567,52 @@ body {
   font-family: "Consolas", "SFMono-Regular", "Courier New", monospace;
 }
 
-.preview-table td.cell-warning {
-  background: #fff4ce;
+.report-result-block {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
 }
 
-.preview-table tr.row-error td {
+.report-result-block + .report-result-block,
+.report-result-block + .reference-comparison {
+  margin-top: 12px;
+}
+
+.report-result-block--error {
   background: #fdeded;
+  border-color: #f3b4b6;
 }
 
-.preview-table tr.row-duplicate td {
+.report-result-block--duplicate {
   background: #fff4ce;
+  border-color: #ffe08a;
+}
+
+.report-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.report-result-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.report-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-result-notes {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .preview-table td.notes-cell {
@@ -613,13 +696,6 @@ body {
   box-shadow: var(--focus-ring);
 }
 
-.preview-table td.action-cell {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  white-space: normal;
-}
-
 .preview-viewraw-btn {
   appearance: none;
   padding: 4px 10px;
@@ -641,22 +717,6 @@ body {
 .preview-viewraw-btn:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-}
-
-/* Reference dataset comparison, shown below the extraction preview */
-.reference-comparison {
-  margin-top: 16px;
-}
-
-.reference-comparison + .reference-comparison {
-  margin-top: 12px;
-}
-
-.reference-comparison-title {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .classification-badge {

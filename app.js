@@ -775,19 +775,10 @@
     return idx !== -1 ? formatExcelCellValue(row[idx]) : "";
   }
 
-  function renderReferenceComparison({ alleles, name, age }) {
-    const wrap = document.createElement("div");
-    wrap.className = "reference-comparison";
-
-    // Matches the "Patient Name (Age)" convention already used in the
-    // extraction preview above, so the two stay visually consistent.
-    const nameWithAge = name && age ? `${name} (${age})` : name;
-
-    const title = document.createElement("h4");
-    title.className = "reference-comparison-title";
-    title.textContent = nameWithAge ? `Reference Data Comparison — ${nameWithAge}` : "Reference Data Comparison";
-    wrap.appendChild(title);
-
+  // One combined table across every patient — a "Patient / Sample ID"
+  // column identifies each row's patient (repeated for each of their
+  // matched alleles) instead of a separate table per patient.
+  function renderResultsTable(patients) {
     const tableWrap = document.createElement("div");
     tableWrap.className = "preview-table-wrap";
     const table = document.createElement("table");
@@ -795,7 +786,7 @@
 
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
-    ["Allele", "Classification", "Reference Frequency"].forEach((c) => {
+    ["Patient Name", "Age", "Allele", "Classification", "Reference Frequency"].forEach((c) => {
       const th = document.createElement("th");
       th.textContent = c;
       headRow.appendChild(th);
@@ -804,19 +795,38 @@
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    const matches = compareToReference(alleles, RPL_REFERENCE_DATA);
+    patients.forEach((patient) => {
+      const nameLabel = patient.name || patient.sampleNumber || "—";
+      const ageLabel = patient.age || "—";
+      const matches = compareToReference(patient.alleles, RPL_REFERENCE_DATA);
 
-    if (!matches.length) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 3;
-      td.className = "notes-cell";
-      td.textContent = "No matches found.";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-    } else {
-      matches.forEach((match) => {
+      if (!matches.length) {
         const tr = document.createElement("tr");
+        const nameTd = document.createElement("td");
+        nameTd.textContent = nameLabel;
+        tr.appendChild(nameTd);
+        const ageTd = document.createElement("td");
+        ageTd.textContent = ageLabel;
+        tr.appendChild(ageTd);
+        const td = document.createElement("td");
+        td.colSpan = 3;
+        td.className = "notes-cell";
+        td.textContent = "No matches found.";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+
+      matches.forEach((match, matchIdx) => {
+        const tr = document.createElement("tr");
+
+        const nameTd = document.createElement("td");
+        nameTd.textContent = matchIdx === 0 ? nameLabel : "";
+        tr.appendChild(nameTd);
+
+        const ageTd = document.createElement("td");
+        ageTd.textContent = matchIdx === 0 ? ageLabel : "";
+        tr.appendChild(ageTd);
 
         const alleleTd = document.createElement("td");
         alleleTd.className = "allele-cell";
@@ -836,12 +846,11 @@
 
         tbody.appendChild(tr);
       });
-    }
+    });
     table.appendChild(tbody);
     tableWrap.appendChild(table);
-    wrap.appendChild(tableWrap);
 
-    return wrap;
+    return tableWrap;
   }
 
   // ---- RPL_Results.xlsx export (additive — a brand-new, standalone
@@ -896,16 +905,15 @@
   `;
 
   const EXCEL_ROW_LIMIT = 25;
-  const EXCEL_EXPANDED_MAX_HEIGHT = "1600px";
 
-  function createUploadCard({ label, columns, parseFile, compareReference }) {
-    const card = document.createElement("div");
-    card.className = "upload-card";
+  function createUploadCard({ label, columns, parseFile, compareReference, onStep }) {
+    const inputPanel = document.createElement("div");
+    inputPanel.className = "upload-card input-panel";
 
     const title = document.createElement("h3");
     title.className = "upload-card-title";
     title.textContent = label;
-    card.appendChild(title);
+    inputPanel.appendChild(title);
 
     const dropzone = document.createElement("div");
     dropzone.className = "dropzone";
@@ -916,24 +924,49 @@
       <div class="dropzone-icon">${DROPZONE_ICON}</div>
       <p class="dropzone-text">Choose file(s) or drag them here</p>
     `;
-    card.appendChild(dropzone);
+    inputPanel.appendChild(dropzone);
 
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     input.multiple = true;
     input.className = "dropzone-input";
-    card.appendChild(input);
+    inputPanel.appendChild(input);
 
     const status = document.createElement("p");
     status.className = "upload-status-text";
     status.hidden = true;
-    card.appendChild(status);
+    inputPanel.appendChild(status);
+
+    const resultsPanel = document.createElement("div");
+    resultsPanel.className = "upload-card results-panel";
+
+    const resultsHeader = document.createElement("div");
+    resultsHeader.className = "results-panel-header";
+    const resultsHeaderLeft = document.createElement("div");
+    resultsHeaderLeft.className = "results-panel-heading";
+    const resultsTitle = document.createElement("h3");
+    resultsTitle.className = "upload-card-title";
+    resultsTitle.textContent = "Analysis Results";
+    const resultsSubtitle = document.createElement("p");
+    resultsSubtitle.className = "results-panel-subtitle";
+    resultsHeaderLeft.appendChild(resultsTitle);
+    resultsHeaderLeft.appendChild(resultsSubtitle);
+    const resultsHeaderActions = document.createElement("div");
+    resultsHeaderActions.className = "results-panel-actions";
+    resultsHeader.appendChild(resultsHeaderLeft);
+    resultsHeader.appendChild(resultsHeaderActions);
+    resultsPanel.appendChild(resultsHeader);
+
+    const resultsEmptyState = document.createElement("p");
+    resultsEmptyState.className = "results-empty-state";
+    resultsEmptyState.textContent = "No files processed yet — upload a report to see results here.";
+    resultsPanel.appendChild(resultsEmptyState);
 
     const previewWrap = document.createElement("div");
     previewWrap.className = "preview-wrap";
     previewWrap.hidden = true;
-    card.appendChild(previewWrap);
+    resultsPanel.appendChild(previewWrap);
 
     // PDF reports accumulate here, unbounded, so a new upload doesn't wipe
     // out ones already reviewed. An Excel upload is a single sheet instead,
@@ -943,15 +976,33 @@
     let excelSheet = null; // { headers, rows }
     let excelExpanded = false;
 
+    // The upload step and the preview/export step are mutually exclusive —
+    // once files are processed, the upload UI goes away entirely and the
+    // only way back to it is the "Upload Files" breadcrumb step, which
+    // re-shows it without clearing whatever's already been processed.
+    function setStep(step) {
+      const isUpload = step === "upload";
+      inputPanel.hidden = !isUpload;
+      resultsPanel.hidden = isUpload;
+      if (onStep) onStep(step);
+    }
+
+    function goToUploadStep() {
+      setStep("upload");
+    }
+
     function resetToDropzone() {
       pdfReports = [];
       excelSheet = null;
       excelExpanded = false;
       previewWrap.hidden = true;
       previewWrap.innerHTML = "";
+      resultsEmptyState.hidden = false;
+      resultsHeaderActions.innerHTML = "";
       dropzone.hidden = false;
       status.hidden = true;
       input.value = "";
+      setStep("upload");
     }
 
     function renderPreviewActions(buttonText) {
@@ -965,6 +1016,9 @@
 
     function renderSheetWarning(message) {
       previewWrap.innerHTML = "";
+      resultsEmptyState.hidden = true;
+      resultsHeaderActions.innerHTML = "";
+      resultsSubtitle.textContent = "";
       const warn = document.createElement("p");
       warn.className = "upload-status-text is-error";
       warn.textContent = message;
@@ -972,255 +1026,193 @@
       renderPreviewActions("Upload another file");
       dropzone.hidden = true;
       previewWrap.hidden = false;
+      setStep("results");
     }
 
-    // Combined table across every uploaded PDF report — one shared header,
-    // one row per report (RPL yields exactly one person per report), with
-    // that report's own Remove button in a trailing column.
+    // A notice block per uploaded PDF report that has warnings/errors (name,
+    // Remove/View Raw actions, and the warning text) — clean reports get no
+    // block at all. Every successfully-parsed patient then goes into one
+    // combined results table below, in the same shape regardless of how
+    // many reports were uploaded. No raw extraction table.
     function renderPdfReports() {
       previewWrap.innerHTML = "";
+      resultsEmptyState.hidden = true;
+      resultsHeaderActions.innerHTML = "";
 
-      const tableWrap = document.createElement("div");
-      tableWrap.className = "preview-table-wrap";
-      const table = document.createElement("table");
-      table.className = "preview-table";
+      const patients = [];
 
-      // Display-only: Age is folded into the "Patient Name" cell/header
-      // instead of its own column. The underlying columns/fieldKeys/values
-      // arrays are untouched (still include "age" at its usual position),
-      // so duplicate detection, reference comparison, and export — which
-      // all read those arrays — are unaffected by this rendering choice.
-      const headerColumns = columns.map((c) => (c === "Patient Name" ? "Patient Name (Age)" : c)).filter((c) => c !== "Age");
-
-      const thead = document.createElement("thead");
-      const headRow = document.createElement("tr");
-      [...headerColumns, "Notes", ""].forEach((c) => {
-        const th = document.createElement("th");
-        th.textContent = c;
-        headRow.appendChild(th);
-      });
-      thead.appendChild(headRow);
-      table.appendChild(thead);
-
-      const tbody = document.createElement("tbody");
       pdfReports.forEach((report, reportIdx) => {
         const person = report.result.people[0];
-        const tr = document.createElement("tr");
         const hasGeneral = person.warnings.some((w) => w.type === "general");
         const hasDuplicate = person.warnings.some((w) => w.type === "duplicate");
-        if (hasGeneral) tr.classList.add("row-error");
-        else if (hasDuplicate) tr.classList.add("row-duplicate");
+        const name = personName(person);
+        const age = personAge(person);
 
-        const ageIdx = person.fieldKeys.indexOf("age");
-        const ageVal = ageIdx !== -1 ? person.values[ageIdx] : "";
-        const ageMissing = person.warnings.some((w) => w.field === "age" && w.type === "missing");
+        if (person.warnings.length) {
+          const block = document.createElement("div");
+          block.className = "report-result-block";
+          if (hasGeneral) block.classList.add("report-result-block--error");
+          else if (hasDuplicate) block.classList.add("report-result-block--duplicate");
 
-        person.values.forEach((val, i) => {
-          const fieldKey = person.fieldKeys[i];
-          if (fieldKey === "age") return; // folded into the "name" cell instead of its own column
+          const header = document.createElement("div");
+          header.className = "report-result-header";
 
-          const td = document.createElement("td");
-          const baseKey = fieldKey && fieldKey.includes("/") ? fieldKey.split("/")[0] : fieldKey;
-          const warned =
-            person.warnings.some((w) => (w.field === fieldKey || w.field === baseKey) && w.type === "missing") ||
-            (fieldKey === "name" && ageMissing);
-          if (warned) td.classList.add("cell-warning");
-          if (fieldKey && fieldKey.includes("/")) td.classList.add("allele-cell");
+          const title = document.createElement("span");
+          title.className = "report-result-title";
+          title.textContent = (name && age ? `${name} (${age})` : name) || report.fileName;
+          header.appendChild(title);
 
-          const displayVal = fieldKey === "name" && ageVal ? `${val || "—"} (${ageVal})` : val;
-          td.textContent = displayVal || "—";
-          tr.appendChild(td);
-        });
+          const actions = document.createElement("div");
+          actions.className = "report-result-actions";
 
-        const notesTd = document.createElement("td");
-        notesTd.className = "notes-cell";
-        notesTd.textContent = person.warnings.map((w) => w.message).join(" ");
-        tr.appendChild(notesTd);
+          if (report.result.rawLines) {
+            const viewRawBtn = document.createElement("button");
+            viewRawBtn.type = "button";
+            viewRawBtn.className = "preview-viewraw-btn";
+            viewRawBtn.textContent = "View Raw Text";
+            viewRawBtn.title = "Shows the exact text the PDF reader extracted, for debugging";
+            viewRawBtn.addEventListener("click", () => {
+              window.prompt(
+                "Raw extracted text — select all (Ctrl/Cmd+A) and copy to share for debugging:",
+                report.result.rawLines
+              );
+            });
+            actions.appendChild(viewRawBtn);
+          }
 
-        const actionTd = document.createElement("td");
-        actionTd.className = "action-cell";
-
-        if (report.result.rawLines) {
-          const viewRawBtn = document.createElement("button");
-          viewRawBtn.type = "button";
-          viewRawBtn.className = "preview-viewraw-btn";
-          viewRawBtn.textContent = "View Raw Text";
-          viewRawBtn.title = "Shows the exact text the PDF reader extracted, for debugging";
-          viewRawBtn.addEventListener("click", () => {
-            window.prompt(
-              "Raw extracted text — select all (Ctrl/Cmd+A) and copy to share for debugging:",
-              report.result.rawLines
-            );
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "preview-remove-btn";
+          removeBtn.textContent = "Remove";
+          removeBtn.addEventListener("click", () => {
+            pdfReports.splice(reportIdx, 1);
+            if (pdfReports.length) renderPdfReports();
+            else resetToDropzone();
           });
-          actionTd.appendChild(viewRawBtn);
+          actions.appendChild(removeBtn);
+
+          header.appendChild(actions);
+          block.appendChild(header);
+
+          const notes = document.createElement("p");
+          notes.className = "report-result-notes";
+          notes.textContent = person.warnings.map((w) => w.message).join(" ");
+          block.appendChild(notes);
+
+          previewWrap.appendChild(block);
         }
 
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "preview-remove-btn";
-        removeBtn.textContent = "Remove";
-        removeBtn.addEventListener("click", () => {
-          pdfReports.splice(reportIdx, 1);
-          if (pdfReports.length) renderPdfReports();
-          else resetToDropzone();
-        });
-        actionTd.appendChild(removeBtn);
-        tr.appendChild(actionTd);
+        if (hasGeneral) return;
 
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      tableWrap.appendChild(table);
-      previewWrap.appendChild(tableWrap);
-
-      // Additive: a reference comparison table per successfully-parsed
-      // report, shown below the (unmodified) extraction preview above, plus
-      // one "Export Results" button covering every patient uploaded so far
-      // in this card's session (not just the latest upload).
-      if (compareReference) {
-        const patients = [];
-        pdfReports.forEach((report) => {
-          const person = report.result.people[0];
-          const hasGeneral = person.warnings.some((w) => w.type === "general");
-          if (hasGeneral) return;
-          previewWrap.appendChild(
-            renderReferenceComparison({
-              alleles: allelesFromPerson(person),
-              name: personName(person),
-              age: personAge(person),
-            })
-          );
+        if (compareReference) {
           patients.push({
-            name: personName(person),
-            age: personAge(person),
+            name,
+            age,
             sampleNumber: report.result.sampleNumber || "",
             alleles: allelesFromPerson(person),
           });
-        });
-
-        if (patients.length) {
-          const exportBtn = document.createElement("button");
-          exportBtn.type = "button";
-          exportBtn.className = "export-results-btn";
-          exportBtn.textContent = "Export Results";
-          exportBtn.addEventListener("click", () => downloadRplResults(patients));
-          previewWrap.appendChild(exportBtn);
         }
+      });
+
+      if (compareReference && patients.length) {
+        previewWrap.appendChild(renderResultsTable(patients));
+
+        const exportBtn = document.createElement("button");
+        exportBtn.type = "button";
+        exportBtn.className = "export-results-btn";
+        exportBtn.textContent = "Export All";
+        exportBtn.addEventListener("click", () => downloadRplResults(patients));
+        resultsHeaderActions.appendChild(exportBtn);
       }
+
+      resultsSubtitle.textContent = compareReference
+        ? `${patients.length} patient(s) processed`
+        : `${pdfReports.length} report(s) processed`;
 
       const summary = document.createElement("p");
       summary.className = "preview-note";
-      summary.textContent = `${pdfReports.length} report(s) uploaded — drag or choose more above to add.`;
+      summary.textContent = `${pdfReports.length} report(s) uploaded — go back to Upload Files above to add more.`;
       previewWrap.appendChild(summary);
 
       renderPreviewActions("Clear all");
       dropzone.hidden = false;
       previewWrap.hidden = false;
+      setStep("results");
     }
 
-    // Renders whatever header structure the sheet actually has. Shows up to
-    // EXCEL_ROW_LIMIT rows within the scrollable card by default; "Show all
-    // records" expands the same container (taller, but still height-bounded)
-    // rather than growing the card unbounded.
+    // Skips the raw sheet echo — shows the reference comparison results
+    // directly as one combined table (up to EXCEL_ROW_LIMIT rows by default;
+    // "Show all records" reveals the rest) instead of echoing the raw sheet.
     function renderExcelTable() {
       previewWrap.innerHTML = "";
+      resultsEmptyState.hidden = true;
+      resultsHeaderActions.innerHTML = "";
 
-      const tableWrap = document.createElement("div");
-      tableWrap.className = "preview-table-wrap preview-table-wrap--scroll-y";
-      if (excelExpanded) tableWrap.style.maxHeight = EXCEL_EXPANDED_MAX_HEIGHT;
-      const table = document.createElement("table");
-      table.className = "preview-table";
+      const hasAlleleColumns = excelSheet.headers.some((h) => normalizeAlleleHeader(h));
 
-      const thead = document.createElement("thead");
-      const headRow = document.createElement("tr");
-      excelSheet.headers.forEach((h) => {
-        const th = document.createElement("th");
-        th.textContent = h || "—";
-        headRow.appendChild(th);
-      });
-      thead.appendChild(headRow);
-      table.appendChild(thead);
+      if (!compareReference || !hasAlleleColumns) {
+        resultsSubtitle.textContent = "";
+        const note = document.createElement("p");
+        note.className = "results-empty-state";
+        note.textContent = "No recognizable allele columns found in this sheet.";
+        previewWrap.appendChild(note);
+      } else {
+        const totalRows = excelSheet.rows.length;
+        const visibleRows = excelExpanded ? excelSheet.rows : excelSheet.rows.slice(0, EXCEL_ROW_LIMIT);
 
-      const totalRows = excelSheet.rows.length;
-      const visibleRows = excelExpanded ? excelSheet.rows : excelSheet.rows.slice(0, EXCEL_ROW_LIMIT);
-
-      const tbody = document.createElement("tbody");
-      visibleRows.forEach((row) => {
-        const tr = document.createElement("tr");
-        excelSheet.headers.forEach((_, i) => {
-          const td = document.createElement("td");
-          const text = formatExcelCellValue(row[i]);
-          if (/^\d{2}:\d{2}(:\d{2})?$/.test(text.trim())) td.classList.add("allele-cell");
-          td.textContent = text || "—";
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      tableWrap.appendChild(table);
-      previewWrap.appendChild(tableWrap);
-
-      // Additive: a reference comparison table per currently-visible row —
-      // only when the sheet actually has recognizable allele columns, so an
-      // unrelated sheet doesn't get spammed with "No matches found." rows.
-      // Follows the same visible-row set as the table above (respects
-      // "Show all records"), so this doesn't balloon the page by default.
-      // The export button below still covers every row in the sheet, not
-      // just the ones currently displayed.
-      if (compareReference && excelSheet.headers.some((h) => normalizeAlleleHeader(h))) {
-        visibleRows.forEach((row) => {
-          previewWrap.appendChild(
-            renderReferenceComparison({
-              alleles: allelesFromExcelRow(excelSheet.headers, row),
-              name: nameFromExcelRow(excelSheet.headers, row),
-              age: ageFromExcelRow(excelSheet.headers, row),
-            })
-          );
-        });
+        const patients = visibleRows.map((row) => ({
+          name: nameFromExcelRow(excelSheet.headers, row),
+          age: ageFromExcelRow(excelSheet.headers, row),
+          sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
+          alleles: allelesFromExcelRow(excelSheet.headers, row),
+        }));
+        previewWrap.appendChild(renderResultsTable(patients));
+        resultsSubtitle.textContent = `${totalRows} patient(s) processed`;
 
         const exportBtn = document.createElement("button");
         exportBtn.type = "button";
         exportBtn.className = "export-results-btn";
-        exportBtn.textContent = "Export Results";
+        exportBtn.textContent = "Export All";
         exportBtn.addEventListener("click", () => {
-          const patients = excelSheet.rows.map((row) => ({
+          const allPatients = excelSheet.rows.map((row) => ({
             name: nameFromExcelRow(excelSheet.headers, row),
             age: ageFromExcelRow(excelSheet.headers, row),
             sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
             alleles: allelesFromExcelRow(excelSheet.headers, row),
           }));
-          downloadRplResults(patients);
+          downloadRplResults(allPatients);
         });
-        previewWrap.appendChild(exportBtn);
-      }
+        resultsHeaderActions.appendChild(exportBtn);
 
-      if (totalRows > EXCEL_ROW_LIMIT) {
-        const footer = document.createElement("div");
-        footer.className = "preview-pager";
+        if (totalRows > EXCEL_ROW_LIMIT) {
+          const footer = document.createElement("div");
+          footer.className = "preview-pager";
 
-        const note = document.createElement("span");
-        note.className = "preview-note";
-        note.textContent = excelExpanded
-          ? `Showing all ${totalRows} rows`
-          : `Showing ${EXCEL_ROW_LIMIT} of ${totalRows} rows`;
-        footer.appendChild(note);
+          const note = document.createElement("span");
+          note.className = "preview-note";
+          note.textContent = excelExpanded
+            ? `Showing all ${totalRows} rows`
+            : `Showing ${EXCEL_ROW_LIMIT} of ${totalRows} rows`;
+          footer.appendChild(note);
 
-        const toggleBtn = document.createElement("button");
-        toggleBtn.type = "button";
-        toggleBtn.className = "preview-show-all-btn";
-        toggleBtn.textContent = excelExpanded ? "Show less" : "Show all records";
-        toggleBtn.addEventListener("click", () => {
-          excelExpanded = !excelExpanded;
-          renderExcelTable();
-        });
-        footer.appendChild(toggleBtn);
+          const toggleBtn = document.createElement("button");
+          toggleBtn.type = "button";
+          toggleBtn.className = "preview-show-all-btn";
+          toggleBtn.textContent = excelExpanded ? "Show less" : "Show all records";
+          toggleBtn.addEventListener("click", () => {
+            excelExpanded = !excelExpanded;
+            renderExcelTable();
+          });
+          footer.appendChild(toggleBtn);
 
-        previewWrap.appendChild(footer);
+          previewWrap.appendChild(footer);
+        }
       }
 
       renderPreviewActions("Upload another file");
       dropzone.hidden = true;
       previewWrap.hidden = false;
+      setStep("results");
     }
 
     async function handleFiles(fileList) {
@@ -1333,7 +1325,9 @@
       handleFiles(input.files);
     });
 
-    return card;
+    setStep("upload");
+
+    return { inputPanel, resultsPanel, goToUploadStep };
   }
 
   const RPL_COLUMNS = ["Patient Name", "Gender", "Age", ...ALLELE_FIELD_KEYS];
@@ -1344,18 +1338,24 @@
   const CONTROL_COLUMNS = ["Name", "Gender", "Age", "Role", ...ALLELE_FIELD_KEYS];
 
   let singleAreaRendered = false;
+  let goToSingleUploadStep = null;
 
   function renderSingleUploadArea() {
     if (singleAreaRendered) return;
-    const container = document.getElementById("upload-area-container");
-    container.appendChild(
-      createUploadCard({
-        label: "Add input file",
-        columns: RPL_COLUMNS,
-        parseFile: processRplPdfFile,
-        compareReference: true,
-      })
-    );
+    const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files");
+    const { inputPanel, resultsPanel, goToUploadStep } = createUploadCard({
+      label: "Add Input File",
+      columns: RPL_COLUMNS,
+      parseFile: processRplPdfFile,
+      compareReference: true,
+      onStep: (step) => {
+        if (breadcrumbUploadFiles) breadcrumbUploadFiles.classList.toggle("is-active", step === "upload");
+      },
+    });
+    document.getElementById("single-input-container").appendChild(inputPanel);
+    document.getElementById("single-results-container").appendChild(resultsPanel);
+    goToSingleUploadStep = goToUploadStep;
+    if (breadcrumbUploadFiles) breadcrumbUploadFiles.addEventListener("click", goToUploadStep);
     singleAreaRendered = true;
   }
 
@@ -1385,6 +1385,9 @@
   }
 
   backToSections.addEventListener("click", goToHomeView);
+
+  const breadcrumbRplPredictor = document.getElementById("breadcrumb-rpl-predictor");
+  if (breadcrumbRplPredictor) breadcrumbRplPredictor.addEventListener("click", goToHomeView);
 
   // Initial render: sidebar chrome, then all three landing cards together.
   renderSidebarLogo();

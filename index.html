@@ -31,12 +31,18 @@
 
         <div class="app-view" id="view-single" hidden>
           <button type="button" class="back-link" id="back-to-sections">
-            <span aria-hidden="true">&larr;</span> Back to sections
+            <span aria-hidden="true">&larr;</span> Back to Sections
           </button>
+          <nav class="breadcrumb" aria-label="Breadcrumb">
+            <button type="button" class="breadcrumb-step" id="breadcrumb-rpl-predictor">RPL Predictor</button>
+            <span class="breadcrumb-sep" aria-hidden="true">&rsaquo;</span>
+            <button type="button" class="breadcrumb-step" id="breadcrumb-upload-files">Upload Files</button>
+          </nav>
 
-          <h2 class="single-page-heading">RPL Predictor</h2>
-
-          <div class="upload-area" id="upload-area-container"></div>
+          <div class="single-page-grid">
+            <div id="single-input-container"></div>
+            <div id="single-results-container"></div>
+          </div>
         </div>
       </main>
     </div>
