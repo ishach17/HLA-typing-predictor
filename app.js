@@ -93,6 +93,7 @@
     const tagHtml = onClick ? "" : `<span class="section-card-tag">Coming Soon</span>`;
     const ctaDisabledAttr = onClick ? "" : " disabled";
     const ctaArrow = onClick ? ` <span aria-hidden="true">&rarr;</span>` : "";
+    const descriptionHtml = description ? `<p class="section-card-description">${description}</p>` : "";
 
     card.innerHTML = `
       ${tagHtml}
@@ -100,7 +101,7 @@
         <div class="section-card-icon">${icon}</div>
       </div>
       <h2 class="section-card-heading">${heading}</h2>
-      <p class="section-card-description">${description}</p>
+      ${descriptionHtml}
       <button type="button" class="section-card-cta" tabindex="-1"${ctaDisabledAttr}>${ctaLabel}${ctaArrow}</button>
     `;
 
@@ -132,7 +133,6 @@
       key: "rpl",
       icon: ICONS.single,
       heading: "RPL",
-      description: "Upload RPL couple reports for reference-based risk classification.",
       ctaLabel: "Get Started",
       onClick: goToRplPage,
     },
@@ -140,7 +140,6 @@
       key: "control",
       icon: ICONS.control,
       heading: "Non RPL Control",
-      description: "Upload Control reports (Patient/Donor PDFs, or a single-patient Excel sheet) for HLA extraction.",
       ctaLabel: "Get Started",
       onClick: goToControlPage,
     },
@@ -148,7 +147,6 @@
       key: "analytics",
       icon: ICONS.analytics,
       heading: "Analytics",
-      description: "Aggregate risk/protective allele classifications across already-exported RPL and Control results sheets.",
       ctaLabel: "Get Started",
       onClick: goToAnalyticsPage,
     },
