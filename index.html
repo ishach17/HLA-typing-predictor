@@ -30,18 +30,46 @@
         </div>
 
         <div class="app-view" id="view-single" hidden>
-          <button type="button" class="back-link" id="back-to-sections">
+          <button type="button" class="back-link" id="back-to-sections-single">
+            <span aria-hidden="true">&larr;</span> Back to Sections
+          </button>
+          <h2 class="content-hero-title">Single Analysis</h2>
+          <div class="section-grid" id="single-subsection-grid"></div>
+        </div>
+
+        <div class="app-view" id="view-rpl" hidden>
+          <button type="button" class="back-link" id="back-to-sections-rpl">
             <span aria-hidden="true">&larr;</span> Back to Sections
           </button>
           <nav class="breadcrumb" aria-label="Breadcrumb">
-            <button type="button" class="breadcrumb-step" id="breadcrumb-rpl-predictor">RPL Predictor</button>
+            <button type="button" class="breadcrumb-step" id="breadcrumb-single-rpl">Single</button>
             <span class="breadcrumb-sep" aria-hidden="true">&rsaquo;</span>
-            <button type="button" class="breadcrumb-step" id="breadcrumb-upload-files">Upload Files</button>
+            <span class="breadcrumb-current">RPL</span>
+            <span class="breadcrumb-sep" aria-hidden="true">&rsaquo;</span>
+            <button type="button" class="breadcrumb-step" id="breadcrumb-upload-files-rpl">Upload Files</button>
           </nav>
 
           <div class="single-page-grid">
-            <div id="single-input-container"></div>
-            <div id="single-results-container"></div>
+            <div id="rpl-input-container"></div>
+            <div id="rpl-results-container"></div>
+          </div>
+        </div>
+
+        <div class="app-view" id="view-control" hidden>
+          <button type="button" class="back-link" id="back-to-sections-control">
+            <span aria-hidden="true">&larr;</span> Back to Sections
+          </button>
+          <nav class="breadcrumb" aria-label="Breadcrumb">
+            <button type="button" class="breadcrumb-step" id="breadcrumb-single-control">Single</button>
+            <span class="breadcrumb-sep" aria-hidden="true">&rsaquo;</span>
+            <span class="breadcrumb-current">Non RPL Control</span>
+            <span class="breadcrumb-sep" aria-hidden="true">&rsaquo;</span>
+            <button type="button" class="breadcrumb-step" id="breadcrumb-upload-files-control">Upload Files</button>
+          </nav>
+
+          <div class="single-page-grid">
+            <div id="control-input-container"></div>
+            <div id="control-results-container"></div>
           </div>
         </div>
       </main>

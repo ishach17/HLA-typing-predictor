@@ -34,6 +34,21 @@
         <circle cx="24" cy="30" r="3"></circle>
       </svg>
     `,
+    control: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M18 6h12"></path>
+        <path d="M20 6v14l-8 16a4 4 0 0 0 4 6h16a4 4 0 0 0 4-6l-8-16V6"></path>
+        <path d="M16 32h16"></path>
+      </svg>
+    `,
+    analytics: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M8 40V20"></path>
+        <path d="M20 40V10"></path>
+        <path d="M32 40V26"></path>
+        <path d="M6 40h36"></path>
+      </svg>
+    `,
   };
 
   // ---- Landing grid: Single / Couple / KIR cards, shown together ----
@@ -105,6 +120,47 @@
   function renderSectionGrid() {
     const grid = document.getElementById("section-grid");
     SECTIONS.forEach((section) => grid.appendChild(renderSectionCard(section)));
+  }
+
+  // ---- Single Analysis sub-selection grid: RPL / Non RPL Control / ----
+  // Analytics, shown after clicking the "Single Analysis" card. RPL and
+  // Non RPL Control are the same two upload cards that used to sit
+  // side by side on one page; Analytics has no functionality yet, so it's
+  // "Coming Soon" like Couple/KIR on the main grid — same renderSectionCard
+  // reused as-is, no changes needed there.
+  const SINGLE_SUBSECTIONS = [
+    {
+      key: "rpl",
+      icon: ICONS.single,
+      heading: "RPL",
+      description: "Upload RPL couple reports for reference-based risk classification.",
+      ctaLabel: "Get Started",
+      onClick: goToRplPage,
+    },
+    {
+      key: "control",
+      icon: ICONS.control,
+      heading: "Non RPL Control",
+      description: "Upload Control reports (Patient/Donor PDFs, or a single-patient Excel sheet) for HLA extraction.",
+      ctaLabel: "Get Started",
+      onClick: goToControlPage,
+    },
+    {
+      key: "analytics",
+      icon: ICONS.analytics,
+      heading: "Analytics",
+      description: "Aggregate insights across processed reports.",
+      ctaLabel: "In Development",
+    },
+  ];
+
+  let singleSubsectionsRendered = false;
+
+  function renderSingleSubsectionGrid() {
+    if (singleSubsectionsRendered) return;
+    const grid = document.getElementById("single-subsection-grid");
+    SINGLE_SUBSECTIONS.forEach((section) => grid.appendChild(renderSectionCard(section)));
+    singleSubsectionsRendered = true;
   }
 
   // ---- Sidebar navigation ----
@@ -1195,8 +1251,23 @@
     resultsHeaderLeft.appendChild(resultsSubtitle);
     const resultsHeaderActions = document.createElement("div");
     resultsHeaderActions.className = "results-panel-actions";
+    const resultsHeaderRight = document.createElement("div");
+    resultsHeaderRight.className = "results-panel-header-right";
+    resultsHeaderRight.appendChild(resultsHeaderActions);
+    // Closes the results preview back to the upload step (same non-
+    // destructive toggle the "Upload Files" breadcrumb step already uses —
+    // nothing uploaded gets cleared) so a long results table doesn't have
+    // to stay on screen eating scroll space once you're done with it.
+    const resultsCloseBtn = document.createElement("button");
+    resultsCloseBtn.type = "button";
+    resultsCloseBtn.className = "results-panel-close";
+    resultsCloseBtn.innerHTML = "&times;";
+    resultsCloseBtn.setAttribute("aria-label", "Close results preview");
+    resultsCloseBtn.title = "Close results preview";
+    resultsCloseBtn.addEventListener("click", () => goToUploadStep());
+    resultsHeaderRight.appendChild(resultsCloseBtn);
     resultsHeader.appendChild(resultsHeaderLeft);
-    resultsHeader.appendChild(resultsHeaderActions);
+    resultsHeader.appendChild(resultsHeaderRight);
     resultsPanel.appendChild(resultsHeader);
 
     const resultsEmptyState = document.createElement("p");
@@ -1575,28 +1646,16 @@
   const RPL_COLUMNS = ["Patient Name", "Gender", "Age", ...ALLELE_FIELD_KEYS];
   const CONTROL_COLUMNS = ["Name", "Gender", "Age", "Role", ...ALLELE_FIELD_KEYS];
 
-  let singleAreaRendered = false;
-  let goToSingleUploadSteps = [];
+  let rplAreaRendered = false;
+  let controlAreaRendered = false;
 
-  // Two separate cards, one per report type, so a file always goes through
-  // the parser that actually matches it instead of every upload defaulting
-  // to RPL. Control's two upload modes behave differently from each other:
-  // a Control PDF still carries a Patient + Donor (no reference-dataset
-  // meaning for a Donor's alleles, so compareReferencePdf is off — that
-  // card just shows the extracted rows), but a Control Excel sheet is a
-  // single-patient, Name/Age/allele-columns sheet — the same shape RPL's
-  // Excel path already reads — so compareReferenceExcel is on, matching
-  // RPL's Excel behavior exactly (reference comparison + Export All).
-  function renderSingleUploadArea() {
-    if (singleAreaRendered) return;
-    const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files");
-    const stepStates = { rpl: "upload", control: "upload" };
-    const syncBreadcrumb = () => {
-      if (breadcrumbUploadFiles) {
-        breadcrumbUploadFiles.classList.toggle("is-active", stepStates.rpl === "upload" || stepStates.control === "upload");
-      }
-    };
-
+  // RPL and Non RPL Control each get their own dedicated page now (see
+  // SINGLE_SUBSECTIONS above) instead of sharing one page — same two
+  // upload cards, same createUploadCard options, just mounted into their
+  // own view's containers/breadcrumb instead of both on one page.
+  function renderRplUploadArea() {
+    if (rplAreaRendered) return;
+    const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files-rpl");
     const rplCard = createUploadCard({
       label: "Add RPL Report",
       columns: RPL_COLUMNS,
@@ -1604,10 +1663,25 @@
       compareReferencePdf: true,
       resultsHeading: "RPL Analysis Results",
       onStep: (step) => {
-        stepStates.rpl = step;
-        syncBreadcrumb();
+        if (breadcrumbUploadFiles) breadcrumbUploadFiles.classList.toggle("is-active", step === "upload");
       },
     });
+    document.getElementById("rpl-input-container").appendChild(rplCard.inputPanel);
+    document.getElementById("rpl-results-container").appendChild(rplCard.resultsPanel);
+    if (breadcrumbUploadFiles) breadcrumbUploadFiles.addEventListener("click", rplCard.goToUploadStep);
+    rplAreaRendered = true;
+  }
+
+  // Control's two upload modes behave differently from each other: a
+  // Control PDF still carries a Patient + Donor (no reference-dataset
+  // meaning for a Donor's alleles, so compareReferencePdf is off — that
+  // card just shows the extracted rows), but a Control Excel sheet is a
+  // single-patient, Name/Age/allele-columns sheet — the same shape RPL's
+  // Excel path already reads — so compareReferenceExcel is on, matching
+  // RPL's Excel behavior exactly (reference comparison + Export All).
+  function renderControlUploadArea() {
+    if (controlAreaRendered) return;
+    const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files-control");
     const controlCard = createUploadCard({
       label: "Add Control Report",
       columns: CONTROL_COLUMNS,
@@ -1617,54 +1691,67 @@
       resultsHeading: "Control Analysis Results",
       resultsFileName: "Control_Results.xlsx",
       onStep: (step) => {
-        stepStates.control = step;
-        syncBreadcrumb();
+        if (breadcrumbUploadFiles) breadcrumbUploadFiles.classList.toggle("is-active", step === "upload");
       },
     });
-
-    const inputContainer = document.getElementById("single-input-container");
-    const resultsContainer = document.getElementById("single-results-container");
-    inputContainer.appendChild(rplCard.inputPanel);
-    inputContainer.appendChild(controlCard.inputPanel);
-    resultsContainer.appendChild(rplCard.resultsPanel);
-    resultsContainer.appendChild(controlCard.resultsPanel);
-
-    goToSingleUploadSteps = [rplCard.goToUploadStep, controlCard.goToUploadStep];
-    if (breadcrumbUploadFiles) {
-      breadcrumbUploadFiles.addEventListener("click", () => goToSingleUploadSteps.forEach((fn) => fn()));
-    }
-    singleAreaRendered = true;
+    document.getElementById("control-input-container").appendChild(controlCard.inputPanel);
+    document.getElementById("control-results-container").appendChild(controlCard.resultsPanel);
+    if (breadcrumbUploadFiles) breadcrumbUploadFiles.addEventListener("click", controlCard.goToUploadStep);
+    controlAreaRendered = true;
   }
 
-  // ---- View switching (home tab view <-> dedicated Single page) ----
+  // ---- View switching (home tab <-> Single sub-selection <-> RPL/Control pages) ----
 
   const viewHome = document.getElementById("view-home");
   const viewSingle = document.getElementById("view-single");
-  const backToSections = document.getElementById("back-to-sections");
+  const viewRpl = document.getElementById("view-rpl");
+  const viewControl = document.getElementById("view-control");
   const topbarPageTitle = document.getElementById("topbar-page-title");
 
-  const PAGE_TITLES = { "view-home": "Analysis Selection", "view-single": "RPL Predictor" };
+  const ALL_VIEWS = [viewHome, viewSingle, viewRpl, viewControl];
+
+  const PAGE_TITLES = {
+    "view-home": "Analysis Selection",
+    "view-single": "Single Analysis",
+    "view-rpl": "RPL",
+    "view-control": "Non RPL Control",
+  };
 
   function showView(view) {
-    [viewHome, viewSingle].forEach((candidate) => {
+    ALL_VIEWS.forEach((candidate) => {
       candidate.hidden = candidate !== view;
     });
     topbarPageTitle.textContent = PAGE_TITLES[view.id] || "";
   }
 
   function goToSinglePage() {
-    renderSingleUploadArea();
+    renderSingleSubsectionGrid();
     showView(viewSingle);
+  }
+
+  function goToRplPage() {
+    renderRplUploadArea();
+    showView(viewRpl);
+  }
+
+  function goToControlPage() {
+    renderControlUploadArea();
+    showView(viewControl);
   }
 
   function goToHomeView() {
     showView(viewHome);
   }
 
-  backToSections.addEventListener("click", goToHomeView);
+  ["back-to-sections-single", "back-to-sections-rpl", "back-to-sections-control"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener("click", goToHomeView);
+  });
 
-  const breadcrumbRplPredictor = document.getElementById("breadcrumb-rpl-predictor");
-  if (breadcrumbRplPredictor) breadcrumbRplPredictor.addEventListener("click", goToHomeView);
+  ["breadcrumb-single-rpl", "breadcrumb-single-control"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener("click", goToSinglePage);
+  });
 
   // Initial render: sidebar chrome, then all three landing cards together.
   renderSidebarLogo();

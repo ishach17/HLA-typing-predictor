@@ -208,20 +208,26 @@ body {
   min-height: 260px;
 }
 
-/* Only the one real, available section gets an accent — everything else
-   stays neutral gray so "Coming Soon" reads as genuinely inactive rather
-   than just a different flavor of active. */
-.section-card--single {
+/* Only real, available sections get an accent — everything else stays
+   neutral gray so "Coming Soon" reads as genuinely inactive rather than
+   just a different flavor of active. Single/RPL/Control are real; Couple/
+   KIR/Analytics aren't built yet. */
+.section-card--single,
+.section-card--rpl,
+.section-card--control {
   border-top: 3px solid var(--accent);
 }
 
-.section-card--single .section-card-icon-circle {
+.section-card--single .section-card-icon-circle,
+.section-card--rpl .section-card-icon-circle,
+.section-card--control .section-card-icon-circle {
   background: #eff6fc;
   color: var(--accent);
 }
 
 .section-card--couple .section-card-icon-circle,
-.section-card--kir .section-card-icon-circle {
+.section-card--kir .section-card-icon-circle,
+.section-card--analytics .section-card-icon-circle {
   background: #f3f2f1;
   color: var(--text-secondary);
 }
@@ -305,13 +311,17 @@ body {
   cursor: pointer;
 }
 
-.section-card--single .section-card-cta {
+.section-card--single .section-card-cta,
+.section-card--rpl .section-card-cta,
+.section-card--control .section-card-cta {
   color: #ffffff;
   background: var(--accent);
   border: 1px solid var(--accent);
 }
 
-.section-card--single .section-card-cta:hover {
+.section-card--single .section-card-cta:hover,
+.section-card--rpl .section-card-cta:hover,
+.section-card--control .section-card-cta:hover {
   background: #106ebe;
   border-color: #106ebe;
 }
@@ -360,6 +370,12 @@ body {
 .breadcrumb-sep {
   color: var(--text-secondary);
   font-size: 14px;
+}
+
+.breadcrumb-current {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 /* Third breadcrumb step, toggling the Single page between its two states:
@@ -452,6 +468,40 @@ body {
 
 .results-panel-actions .export-results-btn {
   margin: 0;
+}
+
+.results-panel-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.results-panel-close {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.results-panel-close:hover {
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.results-panel-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .results-empty-state {
