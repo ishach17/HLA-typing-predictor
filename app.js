@@ -1139,7 +1139,8 @@
     label,
     columns,
     parseFile,
-    compareReference,
+    compareReferencePdf,
+    compareReferenceExcel = compareReferencePdf,
     resultsHeading = "Analysis Results",
     acceptExcel = true,
     onStep,
@@ -1272,11 +1273,12 @@
     // warnings/errors (name, Remove/View Raw actions, and the warning
     // text) — clean people get no block at all. A report can carry more
     // than one person (Control reports are Patient + Donor); each is
-    // checked independently. compareReference cards then get one combined
+    // checked independently. compareReferencePdf cards get one combined
     // results table below (matched against the reference dataset); other
-    // cards get a plain extraction table instead, since there's no
-    // reference dataset to compare Control reports against. No raw
-    // extraction table for compareReference cards.
+    // cards get a plain extraction table instead — Control's PDF path
+    // still carries a Donor, which has no reference-dataset meaning the
+    // way a patient's alleles do. No raw extraction table for
+    // compareReferencePdf cards.
     function renderPdfReports() {
       previewWrap.innerHTML = "";
       resultsEmptyState.hidden = true;
@@ -1351,7 +1353,7 @@
 
           if (hasGeneral) return;
 
-          if (compareReference) {
+          if (compareReferencePdf) {
             patients.push({
               name,
               age,
@@ -1364,14 +1366,14 @@
         });
       });
 
-      if (compareReference && patients.length) {
+      if (compareReferencePdf && patients.length) {
         previewWrap.appendChild(renderResultsTable(patients));
         resultsHeaderActions.appendChild(renderExportMenu(patients));
-      } else if (!compareReference && extractionRows.length) {
+      } else if (!compareReferencePdf && extractionRows.length) {
         previewWrap.appendChild(renderExtractionTable(columns, extractionRows));
       }
 
-      resultsSubtitle.textContent = compareReference
+      resultsSubtitle.textContent = compareReferencePdf
         ? `${patients.length} patient(s) processed`
         : `${pdfReports.length} report(s) processed`;
 
@@ -1396,7 +1398,7 @@
 
       const hasAlleleColumns = excelSheet.headers.some((h) => normalizeAlleleHeader(h));
 
-      if (!compareReference || !hasAlleleColumns) {
+      if (!compareReferenceExcel || !hasAlleleColumns) {
         resultsSubtitle.textContent = "";
         const note = document.createElement("p");
         note.className = "results-empty-state";
@@ -1577,11 +1579,13 @@
 
   // Two separate cards, one per report type, so a file always goes through
   // the parser that actually matches it instead of every upload defaulting
-  // to RPL. Control reports have no reference dataset to compare against
-  // (that's an RPL-specific, population-frequency concept), so its card
-  // skips compareReference and just shows the extracted Patient/Donor
-  // rows; it's also PDF-only, since there's no established Excel layout
-  // for Control reports the way there is for RPL.
+  // to RPL. Control's two upload modes behave differently from each other:
+  // a Control PDF still carries a Patient + Donor (no reference-dataset
+  // meaning for a Donor's alleles, so compareReferencePdf is off — that
+  // card just shows the extracted rows), but a Control Excel sheet is a
+  // single-patient, Name/Age/allele-columns sheet — the same shape RPL's
+  // Excel path already reads — so compareReferenceExcel is on, matching
+  // RPL's Excel behavior exactly (reference comparison + Export All).
   function renderSingleUploadArea() {
     if (singleAreaRendered) return;
     const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files");
@@ -1596,7 +1600,7 @@
       label: "Add RPL Report",
       columns: RPL_COLUMNS,
       parseFile: processRplPdfFile,
-      compareReference: true,
+      compareReferencePdf: true,
       resultsHeading: "RPL Analysis Results",
       onStep: (step) => {
         stepStates.rpl = step;
@@ -1607,9 +1611,9 @@
       label: "Add Control Report",
       columns: CONTROL_COLUMNS,
       parseFile: processControlPdfFile,
-      compareReference: false,
-      resultsHeading: "Control Extraction Results",
-      acceptExcel: false,
+      compareReferencePdf: false,
+      compareReferenceExcel: true,
+      resultsHeading: "Control Analysis Results",
       onStep: (step) => {
         stepStates.control = step;
         syncBreadcrumb();
