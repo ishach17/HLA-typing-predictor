@@ -158,6 +158,30 @@
     return alleles;
   }
 
+  // Some PDFs split a single word across separate text runs whose
+  // x-positions look adjacent, which extractLinesFromPdf() then joins with
+  // a literal space — producing artifacts like "Fem ale", "D P B1", or
+  // "HLA - A*". Builds a matcher with optional whitespace between every
+  // character of `str` so any of these gaps, wherever they land, still match.
+  function withStrayGaps(str) {
+    return str
+      .split("")
+      .map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("\\s*");
+  }
+
+  const GENDER_TOKEN_SOURCE = `\\b(${withStrayGaps("Female")}|${withStrayGaps("Male")}|F|M)\\b`;
+  const GENDER_TOKEN_TEST = new RegExp(GENDER_TOKEN_SOURCE, "i");
+  const GENDER_TOKEN_GLOBAL = new RegExp(GENDER_TOKEN_SOURCE, "gi");
+
+  // Same kerning-gap tolerance, applied to an allele value token — some
+  // PDFs render "24:02:01" as "24 :02:01" or similar. Normalize a matched
+  // token back to its plain form (spaces stripped) before using it.
+  const DIGIT_PAIR_SOURCE = "\\d\\s*\\d";
+  const ALLELE_TOKEN_SOURCE = `${DIGIT_PAIR_SOURCE}\\s*:\\s*${DIGIT_PAIR_SOURCE}(?:\\s*:\\s*${DIGIT_PAIR_SOURCE})?`;
+  const ALLELE_TOKEN_GLOBAL = new RegExp(ALLELE_TOKEN_SOURCE, "g");
+  const normalizeAlleleToken = (raw) => raw.replace(/\s+/g, "");
+
   // PDFs have no real table structure, so visual rows are reconstructed by
   // clustering text items with similar y-position, then sorting each row
   // left-to-right — identical approach to the Report Extractor tool.
@@ -219,17 +243,19 @@
     // whether the row label itself is "Age/Gender" or "Gender/Age". Some
     // templates label the row "Sex" instead of "Gender", and/or abbreviate
     // the value to a bare "F"/"M" instead of spelling it out — both are
-    // accepted here too.
+    // accepted here too. GENDER_TOKEN_* also tolerates a stray space inside
+    // the word itself (e.g. "Fem ale"), a font-kerning artifact some PDFs
+    // produce.
     const genderCandidates = candidateLinesFor(
       lines,
       (l) => /gender|sex/i.test(l),
-      (l) => /\b(Female|Male|F|M)\b/i.test(l)
+      (l) => GENDER_TOKEN_TEST.test(l)
     );
     let genderMatches = [];
     let genderSourceLine = "";
     for (const candidate of genderCandidates) {
-      const candidateMatches = [...candidate.matchAll(/\b(Female|Male|F|M)\b/gi)].map((m) => {
-        const token = m[1].toLowerCase();
+      const candidateMatches = [...candidate.matchAll(GENDER_TOKEN_GLOBAL)].map((m) => {
+        const token = m[1].replace(/\s+/g, "").toLowerCase();
         return token === "f" ? "female" : token === "m" ? "male" : token;
       });
       if (candidateMatches.length > genderMatches.length) {
@@ -259,10 +285,11 @@
           const start = titleIdxs[i];
           const end = i + 1 < titleIdxs.length ? titleIdxs[i + 1] : stripped.length;
           // Trim off any relationship reference (and whatever guardian
-          // name/title follows it) that this patient's own segment
-          // absorbed, now that it's no longer treated as a boundary.
+          // name/title follows it), or a trailing "PIN : ..." patient-ID
+          // field sharing the same line (e.g. "Mrs. Kalpana PIN :
+          // AND23020037156") — neither belongs in the name itself.
           let segment = stripped.slice(start, end);
-          const stopMatch = segment.match(/\s+(?:S\/O|D\/O|W\/O|C\/O)\b/i);
+          const stopMatch = segment.match(/\s+(?:S\/O|D\/O|W\/O|C\/O|PIN)\b/i);
           if (stopMatch) segment = segment.slice(0, stopMatch.index);
           candidateNames.push(segment.trim());
         }
@@ -305,17 +332,16 @@
     const age = ageMatches.length ? ageMatches[Math.min(femaleIndex, ageMatches.length - 1)] || ageMatches[0] : "";
 
     const alleles = emptyAlleles();
+    const alleleWarnings = [];
     for (const locus of LOCI) {
       const key = locus.replace("HLA-", "");
-      const escaped = locus.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // Allow optional whitespace around the dash and before the asterisk —
-      // some PDFs have font-kerning artifacts that insert stray spaces
-      // mid-label (e.g. "HLA - A*" instead of "HLA-A*").
-      const flexiblePattern = escaped.replace(/-/g, "\\s*-\\s*");
-      const locusLineRegex = new RegExp(flexiblePattern + "\\s*\\*", "i");
+      // Allow a stray space anywhere inside the label, not just around the
+      // dash — some PDFs split individual letters into separate text runs
+      // (e.g. "HLA - A*", or "D P B1*" for DPB1).
+      const locusLineRegex = new RegExp(withStrayGaps(locus) + "\\s*\\*", "i");
       const locusCandidates = lines.filter((l) => locusLineRegex.test(l));
       if (!locusCandidates.length) {
-        warnings.push({ field: key, type: "missing", message: `Could not find ${locus} row.` });
+        alleleWarnings.push({ field: key, type: "missing", message: `Could not find ${locus} row.` });
         continue;
       }
 
@@ -324,7 +350,7 @@
       let tokens = [];
       let exactMatch = null;
       for (const candidate of locusCandidates) {
-        const candidateTokens = [...candidate.matchAll(/\d{2}:\d{2}(?::\d{2})?/g)].map((m) => m[0]);
+        const candidateTokens = [...candidate.matchAll(ALLELE_TOKEN_GLOBAL)].map((m) => normalizeAlleleToken(m[0]));
         if (candidateTokens.length === peopleCount * 2) {
           exactMatch = candidateTokens;
           break;
@@ -337,7 +363,7 @@
       // candidate line has the right token count, slicing by position is
       // unsafe — flag it instead of guessing.
       if (tokens.length !== peopleCount * 2) {
-        warnings.push({
+        alleleWarnings.push({
           field: key,
           type: "missing",
           message: `${locus} row had ${tokens.length} allele value(s) for ${peopleCount} patient(s) (expected ${peopleCount * 2}) — please verify manually.`,
@@ -354,7 +380,79 @@
       alleles[`${key}/2`] = pair[1] || "";
     }
 
+    // Some templates put every locus label on one shared header line (e.g.
+    // "LOCUS HLA-A* HLA-B* HLA-C* HLA-DRB1* HLA-DQB1* HLA-DPB1*") instead of
+    // repeating each locus's own label+values on its own line, with the
+    // values instead sitting in separate rows below, numbered "1"/"2" (one
+    // row per allele index, left-to-right in the header's column order).
+    // Only worth trying when the search above found nothing at all, and
+    // only for a single-patient report — there's no extra column here to
+    // pick one particular patient's data out of.
+    if (peopleCount === 1 && LOCUS_KEYS.every((k) => !alleles[`${k}/1`] && !alleles[`${k}/2`])) {
+      const genotypeTableAlleles = extractGenotypeTableAlleles(lines);
+      if (genotypeTableAlleles) {
+        Object.assign(alleles, genotypeTableAlleles);
+        LOCUS_KEYS.forEach((k) => {
+          if (!alleles[`${k}/1`] && !alleles[`${k}/2`]) {
+            warnings.push({
+              field: k,
+              type: "missing",
+              message: `Could not find HLA-${k} in the genotype table — please verify manually.`,
+            });
+          }
+        });
+      } else {
+        warnings.push(...alleleWarnings);
+      }
+    } else {
+      warnings.push(...alleleWarnings);
+    }
+
     return { name, gender, age, alleles, warnings };
+  }
+
+  // See the fallback note above parseRplReport's genotype-table check for
+  // when this applies. `lines` is the same array extractLinesFromPdf()
+  // produces; this only reads it, never parseRplReport's own state.
+  function extractGenotypeTableAlleles(lines) {
+    // A header line naming at least two loci — in whatever left-to-right
+    // order they actually appear in — is what lets each column of the
+    // value rows below be matched back to the right locus.
+    let orderedLoci = [];
+    for (const line of lines) {
+      const positions = LOCI.map((locus) => ({
+        locus,
+        index: line.search(new RegExp(withStrayGaps(locus) + "\\s*\\*", "i")),
+      }))
+        .filter((p) => p.index !== -1)
+        .sort((a, b) => a.index - b.index);
+      if (positions.length >= 2) {
+        orderedLoci = positions.map((p) => p.locus);
+        break;
+      }
+    }
+    if (!orderedLoci.length) return null;
+
+    // A value row: a small leading row number, then exactly one allele
+    // token per locus, in the header's column order. Only the first two
+    // such rows found are used (allele 1, allele 2).
+    const valueRows = [];
+    for (const line of lines) {
+      const rowMatch = line.match(/^\s*\d{1,2}\s+(.*)$/);
+      if (!rowMatch) continue;
+      const tokens = [...rowMatch[1].matchAll(ALLELE_TOKEN_GLOBAL)].map((m) => normalizeAlleleToken(m[0]));
+      if (tokens.length === orderedLoci.length) valueRows.push(tokens);
+      if (valueRows.length === 2) break;
+    }
+    if (valueRows.length < 2) return null;
+
+    const alleles = {};
+    orderedLoci.forEach((locus, colIdx) => {
+      const key = locus.replace("HLA-", "");
+      alleles[`${key}/1`] = valueRows[0][colIdx] || "";
+      alleles[`${key}/2`] = valueRows[1][colIdx] || "";
+    });
+    return alleles;
   }
 
   // ---- Sample Number extraction (additive — a separate, self-contained
@@ -366,12 +464,15 @@
   function extractSampleNumber(lines) {
     const genderCandidates = candidateLinesFor(
       lines,
-      (l) => /gender/i.test(l),
-      (l) => /\b(Female|Male)\b/i.test(l)
+      (l) => /gender|sex/i.test(l),
+      (l) => GENDER_TOKEN_TEST.test(l)
     );
     let genderMatches = [];
     for (const candidate of genderCandidates) {
-      const candidateMatches = [...candidate.matchAll(/\b(Female|Male)\b/gi)].map((m) => m[1].toLowerCase());
+      const candidateMatches = [...candidate.matchAll(GENDER_TOKEN_GLOBAL)].map((m) => {
+        const token = m[1].replace(/\s+/g, "").toLowerCase();
+        return token === "f" ? "female" : token === "m" ? "male" : token;
+      });
       if (candidateMatches.length > genderMatches.length) genderMatches = candidateMatches;
     }
     let femaleIndex = genderMatches.findIndex((g) => g === "female");
