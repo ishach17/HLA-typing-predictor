@@ -954,6 +954,43 @@
     return tableWrap;
   }
 
+  // For cards with no reference dataset to compare against (Control
+  // reports) — one row per person (e.g. Patient + Donor), rendered plainly
+  // using that card's own `columns`/values/fieldKeys, one-to-one.
+  function renderExtractionTable(columns, people) {
+    const tableWrap = document.createElement("div");
+    tableWrap.className = "preview-table-wrap";
+    const table = document.createElement("table");
+    table.className = "preview-table";
+
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    columns.forEach((c) => {
+      const th = document.createElement("th");
+      th.textContent = c;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    people.forEach((person) => {
+      const tr = document.createElement("tr");
+      person.values.forEach((val, i) => {
+        const td = document.createElement("td");
+        const fieldKey = person.fieldKeys[i];
+        if (fieldKey && fieldKey.includes("/")) td.classList.add("allele-cell");
+        td.textContent = val || "—";
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+
+    return tableWrap;
+  }
+
   // ---- RPL_Results.xlsx export (additive — a brand-new, standalone
   // workbook built and downloaded entirely client-side via the SheetJS
   // APIs already used for the Excel-upload path; never touches whatever
@@ -996,6 +1033,97 @@
     XLSX.writeFile(wb, "RPL_Results.xlsx");
   }
 
+  // A page can't silently write back into a file already saved on disk —
+  // the closest a static page can get to "add this batch to my existing
+  // sheet" is: read the file the user picks, keep its data rows as-is
+  // (whatever it already had), and download one combined file with this
+  // batch's new rows appended after them. The user still has to save that
+  // over the original themselves.
+  async function mergeAndDownloadRplResults(patients, existingFile) {
+    const buf = await existingFile.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const sheetName = wb.SheetNames.includes("Results") ? "Results" : wb.SheetNames[0];
+    const existingRows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 });
+    const existingDataRows = existingRows.slice(1); // drop the existing header row
+    const combinedRows = [...existingDataRows, ...buildRplResultsRows(patients)];
+
+    const wbOut = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([RPL_RESULTS_HEADERS, ...combinedRows]);
+    XLSX.utils.book_append_sheet(wbOut, ws, "Results");
+    XLSX.writeFile(wbOut, "RPL_Results.xlsx");
+  }
+
+  // Only one export dropdown can be open at a time across the whole page,
+  // so a single shared listener (registered once, ever) closes whichever
+  // one is currently open on an outside click — re-rendering a card's
+  // export menu shouldn't pile up a fresh document-level listener each time.
+  let activeExportMenu = null;
+  document.addEventListener("click", (event) => {
+    if (activeExportMenu && !activeExportMenu.wrap.contains(event.target)) {
+      activeExportMenu.menu.hidden = true;
+    }
+  });
+
+  function renderExportMenu(patients) {
+    const wrap = document.createElement("div");
+    wrap.className = "export-menu";
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.className = "export-results-btn export-menu-toggle";
+    toggleBtn.innerHTML = `Export All <span aria-hidden="true">&#9662;</span>`;
+    wrap.appendChild(toggleBtn);
+
+    const menu = document.createElement("div");
+    menu.className = "export-menu-list";
+    menu.hidden = true;
+    wrap.appendChild(menu);
+
+    const newFileBtn = document.createElement("button");
+    newFileBtn.type = "button";
+    newFileBtn.className = "export-menu-item";
+    newFileBtn.textContent = "Start a new file";
+    newFileBtn.addEventListener("click", () => {
+      menu.hidden = true;
+      downloadRplResults(patients);
+    });
+    menu.appendChild(newFileBtn);
+
+    const mergeInput = document.createElement("input");
+    mergeInput.type = "file";
+    mergeInput.accept = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx";
+    mergeInput.hidden = true;
+    mergeInput.addEventListener("change", async () => {
+      const file = mergeInput.files[0];
+      mergeInput.value = "";
+      if (!file) return;
+      try {
+        await mergeAndDownloadRplResults(patients, file);
+      } catch (err) {
+        window.alert(`Could not read "${file.name}" as an Excel file: ${err.message}`);
+      }
+    });
+    wrap.appendChild(mergeInput);
+
+    const mergeBtn = document.createElement("button");
+    mergeBtn.type = "button";
+    mergeBtn.className = "export-menu-item";
+    mergeBtn.textContent = "Add to an existing file…";
+    mergeBtn.addEventListener("click", () => {
+      menu.hidden = true;
+      mergeInput.click();
+    });
+    menu.appendChild(mergeBtn);
+
+    toggleBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      menu.hidden = !menu.hidden;
+      activeExportMenu = menu.hidden ? null : { wrap, menu };
+    });
+
+    return wrap;
+  }
+
   // ---- Upload card UI ----
 
   const DROPZONE_ICON = `
@@ -1007,7 +1135,15 @@
 
   const EXCEL_ROW_LIMIT = 25;
 
-  function createUploadCard({ label, columns, parseFile, compareReference, onStep }) {
+  function createUploadCard({
+    label,
+    columns,
+    parseFile,
+    compareReference,
+    resultsHeading = "Analysis Results",
+    acceptExcel = true,
+    onStep,
+  }) {
     const inputPanel = document.createElement("div");
     inputPanel.className = "upload-card input-panel";
 
@@ -1020,7 +1156,7 @@
     dropzone.className = "dropzone";
     dropzone.tabIndex = 0;
     dropzone.setAttribute("role", "button");
-    dropzone.setAttribute("aria-label", `Upload ${label} PDF or Excel report`);
+    dropzone.setAttribute("aria-label", `Upload ${label} ${acceptExcel ? "PDF or Excel" : "PDF"} report`);
     dropzone.innerHTML = `
       <div class="dropzone-icon">${DROPZONE_ICON}</div>
       <p class="dropzone-text">Choose file(s) or drag them here</p>
@@ -1029,7 +1165,9 @@
 
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    input.accept = acceptExcel
+      ? "application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      : "application/pdf";
     input.multiple = true;
     input.className = "dropzone-input";
     inputPanel.appendChild(input);
@@ -1048,7 +1186,7 @@
     resultsHeaderLeft.className = "results-panel-heading";
     const resultsTitle = document.createElement("h3");
     resultsTitle.className = "upload-card-title";
-    resultsTitle.textContent = "Analysis Results";
+    resultsTitle.textContent = resultsHeading;
     const resultsSubtitle = document.createElement("p");
     resultsSubtitle.className = "results-panel-subtitle";
     resultsHeaderLeft.appendChild(resultsTitle);
@@ -1130,100 +1268,107 @@
       setStep("results");
     }
 
-    // A notice block per uploaded PDF report that has warnings/errors (name,
-    // Remove/View Raw actions, and the warning text) — clean reports get no
-    // block at all. Every successfully-parsed patient then goes into one
-    // combined results table below, in the same shape regardless of how
-    // many reports were uploaded. No raw extraction table.
+    // A notice block per person (across every uploaded PDF report) that has
+    // warnings/errors (name, Remove/View Raw actions, and the warning
+    // text) — clean people get no block at all. A report can carry more
+    // than one person (Control reports are Patient + Donor); each is
+    // checked independently. compareReference cards then get one combined
+    // results table below (matched against the reference dataset); other
+    // cards get a plain extraction table instead, since there's no
+    // reference dataset to compare Control reports against. No raw
+    // extraction table for compareReference cards.
     function renderPdfReports() {
       previewWrap.innerHTML = "";
       resultsEmptyState.hidden = true;
       resultsHeaderActions.innerHTML = "";
 
       const patients = [];
+      const extractionRows = [];
 
       pdfReports.forEach((report, reportIdx) => {
-        const person = report.result.people[0];
-        const hasGeneral = person.warnings.some((w) => w.type === "general");
-        const hasDuplicate = person.warnings.some((w) => w.type === "duplicate");
-        const name = personName(person);
-        const age = personAge(person);
+        report.result.people.forEach((person) => {
+          const hasGeneral = person.warnings.some((w) => w.type === "general");
+          const hasDuplicate = person.warnings.some((w) => w.type === "duplicate");
+          const name = personName(person);
+          const age = personAge(person);
+          const roleIdx = person.fieldKeys.indexOf("role");
+          const role = roleIdx !== -1 ? person.values[roleIdx] : "";
 
-        if (person.warnings.length) {
-          const block = document.createElement("div");
-          block.className = "report-result-block";
-          if (hasGeneral) block.classList.add("report-result-block--error");
-          else if (hasDuplicate) block.classList.add("report-result-block--duplicate");
+          if (person.warnings.length) {
+            const block = document.createElement("div");
+            block.className = "report-result-block";
+            if (hasGeneral) block.classList.add("report-result-block--error");
+            else if (hasDuplicate) block.classList.add("report-result-block--duplicate");
 
-          const header = document.createElement("div");
-          header.className = "report-result-header";
+            const header = document.createElement("div");
+            header.className = "report-result-header";
 
-          const title = document.createElement("span");
-          title.className = "report-result-title";
-          title.textContent = (name && age ? `${name} (${age})` : name) || report.fileName;
-          header.appendChild(title);
+            const title = document.createElement("span");
+            title.className = "report-result-title";
+            const namePart = (name && age ? `${name} (${age})` : name) || report.fileName;
+            title.textContent = role ? `${namePart} — ${role}` : namePart;
+            header.appendChild(title);
 
-          const actions = document.createElement("div");
-          actions.className = "report-result-actions";
+            const actions = document.createElement("div");
+            actions.className = "report-result-actions";
 
-          if (report.result.rawLines) {
-            const viewRawBtn = document.createElement("button");
-            viewRawBtn.type = "button";
-            viewRawBtn.className = "preview-viewraw-btn";
-            viewRawBtn.textContent = "View Raw Text";
-            viewRawBtn.title = "Shows the exact text the PDF reader extracted, for debugging";
-            viewRawBtn.addEventListener("click", () => {
-              window.prompt(
-                "Raw extracted text — select all (Ctrl/Cmd+A) and copy to share for debugging:",
-                report.result.rawLines
-              );
+            if (report.result.rawLines) {
+              const viewRawBtn = document.createElement("button");
+              viewRawBtn.type = "button";
+              viewRawBtn.className = "preview-viewraw-btn";
+              viewRawBtn.textContent = "View Raw Text";
+              viewRawBtn.title = "Shows the exact text the PDF reader extracted, for debugging";
+              viewRawBtn.addEventListener("click", () => {
+                window.prompt(
+                  "Raw extracted text — select all (Ctrl/Cmd+A) and copy to share for debugging:",
+                  report.result.rawLines
+                );
+              });
+              actions.appendChild(viewRawBtn);
+            }
+
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.className = "preview-remove-btn";
+            removeBtn.textContent = "Remove";
+            removeBtn.addEventListener("click", () => {
+              pdfReports.splice(reportIdx, 1);
+              if (pdfReports.length) renderPdfReports();
+              else resetToDropzone();
             });
-            actions.appendChild(viewRawBtn);
+            actions.appendChild(removeBtn);
+
+            header.appendChild(actions);
+            block.appendChild(header);
+
+            const notes = document.createElement("p");
+            notes.className = "report-result-notes";
+            notes.textContent = person.warnings.map((w) => w.message).join(" ");
+            block.appendChild(notes);
+
+            previewWrap.appendChild(block);
           }
 
-          const removeBtn = document.createElement("button");
-          removeBtn.type = "button";
-          removeBtn.className = "preview-remove-btn";
-          removeBtn.textContent = "Remove";
-          removeBtn.addEventListener("click", () => {
-            pdfReports.splice(reportIdx, 1);
-            if (pdfReports.length) renderPdfReports();
-            else resetToDropzone();
-          });
-          actions.appendChild(removeBtn);
+          if (hasGeneral) return;
 
-          header.appendChild(actions);
-          block.appendChild(header);
-
-          const notes = document.createElement("p");
-          notes.className = "report-result-notes";
-          notes.textContent = person.warnings.map((w) => w.message).join(" ");
-          block.appendChild(notes);
-
-          previewWrap.appendChild(block);
-        }
-
-        if (hasGeneral) return;
-
-        if (compareReference) {
-          patients.push({
-            name,
-            age,
-            sampleNumber: report.result.sampleNumber || "",
-            alleles: allelesFromPerson(person),
-          });
-        }
+          if (compareReference) {
+            patients.push({
+              name,
+              age,
+              sampleNumber: report.result.sampleNumber || "",
+              alleles: allelesFromPerson(person),
+            });
+          } else {
+            extractionRows.push(person);
+          }
+        });
       });
 
       if (compareReference && patients.length) {
         previewWrap.appendChild(renderResultsTable(patients));
-
-        const exportBtn = document.createElement("button");
-        exportBtn.type = "button";
-        exportBtn.className = "export-results-btn";
-        exportBtn.textContent = "Export All";
-        exportBtn.addEventListener("click", () => downloadRplResults(patients));
-        resultsHeaderActions.appendChild(exportBtn);
+        resultsHeaderActions.appendChild(renderExportMenu(patients));
+      } else if (!compareReference && extractionRows.length) {
+        previewWrap.appendChild(renderExtractionTable(columns, extractionRows));
       }
 
       resultsSubtitle.textContent = compareReference
@@ -1270,20 +1415,13 @@
         previewWrap.appendChild(renderResultsTable(patients));
         resultsSubtitle.textContent = `${totalRows} patient(s) processed`;
 
-        const exportBtn = document.createElement("button");
-        exportBtn.type = "button";
-        exportBtn.className = "export-results-btn";
-        exportBtn.textContent = "Export All";
-        exportBtn.addEventListener("click", () => {
-          const allPatients = excelSheet.rows.map((row) => ({
-            name: nameFromExcelRow(excelSheet.headers, row),
-            age: ageFromExcelRow(excelSheet.headers, row),
-            sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
-            alleles: allelesFromExcelRow(excelSheet.headers, row),
-          }));
-          downloadRplResults(allPatients);
-        });
-        resultsHeaderActions.appendChild(exportBtn);
+        const allPatients = excelSheet.rows.map((row) => ({
+          name: nameFromExcelRow(excelSheet.headers, row),
+          age: ageFromExcelRow(excelSheet.headers, row),
+          sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
+          alleles: allelesFromExcelRow(excelSheet.headers, row),
+        }));
+        resultsHeaderActions.appendChild(renderExportMenu(allPatients));
 
         if (totalRows > EXCEL_ROW_LIMIT) {
           const footer = document.createElement("div");
@@ -1321,12 +1459,12 @@
       if (!files.length) return;
 
       const pdfFiles = files.filter(isPdfFile);
-      const excelFiles = files.filter(isExcelFile);
+      const excelFiles = acceptExcel ? files.filter(isExcelFile) : [];
 
       if (!pdfFiles.length && !excelFiles.length) {
         status.hidden = false;
         status.className = "upload-status-text is-error";
-        status.textContent = "Please upload PDF or Excel (.xlsx) files only.";
+        status.textContent = acceptExcel ? "Please upload PDF or Excel (.xlsx) files only." : "Please upload PDF files only.";
         input.value = "";
         return;
       }
@@ -1432,31 +1570,63 @@
   }
 
   const RPL_COLUMNS = ["Patient Name", "Gender", "Age", ...ALLELE_FIELD_KEYS];
-  // Kept alongside the (currently unwired) Control parsing engine above —
-  // Control-report handling is being developed separately and is out of
-  // scope for this section's UI, but the columns stay defined for when it
-  // returns.
   const CONTROL_COLUMNS = ["Name", "Gender", "Age", "Role", ...ALLELE_FIELD_KEYS];
 
   let singleAreaRendered = false;
-  let goToSingleUploadStep = null;
+  let goToSingleUploadSteps = [];
 
+  // Two separate cards, one per report type, so a file always goes through
+  // the parser that actually matches it instead of every upload defaulting
+  // to RPL. Control reports have no reference dataset to compare against
+  // (that's an RPL-specific, population-frequency concept), so its card
+  // skips compareReference and just shows the extracted Patient/Donor
+  // rows; it's also PDF-only, since there's no established Excel layout
+  // for Control reports the way there is for RPL.
   function renderSingleUploadArea() {
     if (singleAreaRendered) return;
     const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files");
-    const { inputPanel, resultsPanel, goToUploadStep } = createUploadCard({
-      label: "Add Input File",
+    const stepStates = { rpl: "upload", control: "upload" };
+    const syncBreadcrumb = () => {
+      if (breadcrumbUploadFiles) {
+        breadcrumbUploadFiles.classList.toggle("is-active", stepStates.rpl === "upload" || stepStates.control === "upload");
+      }
+    };
+
+    const rplCard = createUploadCard({
+      label: "Add RPL Report",
       columns: RPL_COLUMNS,
       parseFile: processRplPdfFile,
       compareReference: true,
+      resultsHeading: "RPL Analysis Results",
       onStep: (step) => {
-        if (breadcrumbUploadFiles) breadcrumbUploadFiles.classList.toggle("is-active", step === "upload");
+        stepStates.rpl = step;
+        syncBreadcrumb();
       },
     });
-    document.getElementById("single-input-container").appendChild(inputPanel);
-    document.getElementById("single-results-container").appendChild(resultsPanel);
-    goToSingleUploadStep = goToUploadStep;
-    if (breadcrumbUploadFiles) breadcrumbUploadFiles.addEventListener("click", goToUploadStep);
+    const controlCard = createUploadCard({
+      label: "Add Control Report",
+      columns: CONTROL_COLUMNS,
+      parseFile: processControlPdfFile,
+      compareReference: false,
+      resultsHeading: "Control Extraction Results",
+      acceptExcel: false,
+      onStep: (step) => {
+        stepStates.control = step;
+        syncBreadcrumb();
+      },
+    });
+
+    const inputContainer = document.getElementById("single-input-container");
+    const resultsContainer = document.getElementById("single-results-container");
+    inputContainer.appendChild(rplCard.inputPanel);
+    inputContainer.appendChild(controlCard.inputPanel);
+    resultsContainer.appendChild(rplCard.resultsPanel);
+    resultsContainer.appendChild(controlCard.resultsPanel);
+
+    goToSingleUploadSteps = [rplCard.goToUploadStep, controlCard.goToUploadStep];
+    if (breadcrumbUploadFiles) {
+      breadcrumbUploadFiles.addEventListener("click", () => goToSingleUploadSteps.forEach((fn) => fn()));
+    }
     singleAreaRendered = true;
   }
 

@@ -406,6 +406,12 @@ body {
   padding: 20px;
 }
 
+/* The Single page stacks two cards per container (RPL + Control) — space
+   them apart the same way the page's other 20px gaps read. */
+.upload-card + .upload-card {
+  margin-top: 20px;
+}
+
 .upload-card-title {
   margin: 0;
   font-size: 16px;
@@ -670,6 +676,57 @@ body {
 }
 
 .export-results-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.export-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.export-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.export-menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.export-menu-item {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.export-menu-item:hover {
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.export-menu-item:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
