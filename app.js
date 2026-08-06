@@ -1276,8 +1276,16 @@
     const marginLeft = 30;
     const marginRight = 20;
     const marginTop = 30;
-    const marginBottom = 60;
     const chartHeight = 200;
+    const labelLineHeight = 14;
+
+    // Combination labels (e.g. "C*12:02 + DQB1*02:01") are split at " + "
+    // into one allele per line — stacked horizontally underneath the bars
+    // instead of rotated, so nothing runs off the edge of the chart and
+    // every allele stays readable in a straight line.
+    const labelLines = entries.map((e) => e.label.split(" + "));
+    const maxLines = Math.max(1, ...labelLines.map((lines) => lines.length));
+    const marginBottom = 24 + maxLines * labelLineHeight;
 
     const maxValue = Math.max(1, ...entries.flatMap((e) => [e.rpl, e.control]));
     const width = marginLeft + marginRight + entries.length * groupWidth + Math.max(0, entries.length - 1) * groupGap;
@@ -1327,18 +1335,16 @@
         group.appendChild(countLabel);
       });
 
-      const labelY = marginTop + chartHeight + 20;
       const labelX = groupX + groupWidth / 2;
-      const categoryLabel = document.createElementNS(svgNS, "text");
-      categoryLabel.setAttribute("x", labelX);
-      categoryLabel.setAttribute("y", labelY);
-      categoryLabel.setAttribute("text-anchor", entry.label.length > 12 ? "end" : "middle");
-      categoryLabel.setAttribute("class", "analytics-chart-label");
-      categoryLabel.textContent = entry.label;
-      if (entry.label.length > 12) {
-        categoryLabel.setAttribute("transform", `rotate(-25 ${labelX} ${labelY})`);
-      }
-      group.appendChild(categoryLabel);
+      labelLines[i].forEach((line, lineIdx) => {
+        const lineLabel = document.createElementNS(svgNS, "text");
+        lineLabel.setAttribute("x", labelX);
+        lineLabel.setAttribute("y", marginTop + chartHeight + 20 + lineIdx * labelLineHeight);
+        lineLabel.setAttribute("text-anchor", "middle");
+        lineLabel.setAttribute("class", "analytics-chart-label");
+        lineLabel.textContent = lineIdx === 0 ? line : `+ ${line}`;
+        group.appendChild(lineLabel);
+      });
 
       if (entry.clickable && onBarClick) {
         const hit = document.createElementNS(svgNS, "rect");

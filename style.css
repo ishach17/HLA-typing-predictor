@@ -210,24 +210,25 @@ body {
 
 /* Only real, available sections get an accent — everything else stays
    neutral gray so "Coming Soon" reads as genuinely inactive rather than
-   just a different flavor of active. Single/RPL/Control are real; Couple/
-   KIR/Analytics aren't built yet. */
+   just a different flavor of active. Single/RPL/Control/Analytics are
+   real; Couple/KIR aren't built yet. */
 .section-card--single,
 .section-card--rpl,
-.section-card--control {
+.section-card--control,
+.section-card--analytics {
   border-top: 3px solid var(--accent);
 }
 
 .section-card--single .section-card-icon-circle,
 .section-card--rpl .section-card-icon-circle,
-.section-card--control .section-card-icon-circle {
+.section-card--control .section-card-icon-circle,
+.section-card--analytics .section-card-icon-circle {
   background: #eff6fc;
   color: var(--accent);
 }
 
 .section-card--couple .section-card-icon-circle,
-.section-card--kir .section-card-icon-circle,
-.section-card--analytics .section-card-icon-circle {
+.section-card--kir .section-card-icon-circle {
   background: #f3f2f1;
   color: var(--text-secondary);
 }
@@ -313,7 +314,8 @@ body {
 
 .section-card--single .section-card-cta,
 .section-card--rpl .section-card-cta,
-.section-card--control .section-card-cta {
+.section-card--control .section-card-cta,
+.section-card--analytics .section-card-cta {
   color: #ffffff;
   background: var(--accent);
   border: 1px solid var(--accent);
@@ -321,7 +323,8 @@ body {
 
 .section-card--single .section-card-cta:hover,
 .section-card--rpl .section-card-cta:hover,
-.section-card--control .section-card-cta:hover {
+.section-card--control .section-card-cta:hover,
+.section-card--analytics .section-card-cta:hover {
   background: #106ebe;
   border-color: #106ebe;
 }
