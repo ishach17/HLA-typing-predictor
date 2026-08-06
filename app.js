@@ -125,9 +125,8 @@
   // ---- Single Analysis sub-selection grid: RPL / Non RPL Control / ----
   // Analytics, shown after clicking the "Single Analysis" card. RPL and
   // Non RPL Control are the same two upload cards that used to sit
-  // side by side on one page; Analytics has no functionality yet, so it's
-  // "Coming Soon" like Couple/KIR on the main grid — same renderSectionCard
-  // reused as-is, no changes needed there.
+  // side by side on one page; same renderSectionCard reused as-is, no
+  // changes needed there.
   const SINGLE_SUBSECTIONS = [
     {
       key: "rpl",
@@ -149,8 +148,9 @@
       key: "analytics",
       icon: ICONS.analytics,
       heading: "Analytics",
-      description: "Aggregate insights across processed reports.",
-      ctaLabel: "In Development",
+      description: "Aggregate risk/protective allele classifications across already-exported RPL and Control results sheets.",
+      ctaLabel: "Get Started",
+      onClick: goToAnalyticsPage,
     },
   ];
 
@@ -1180,6 +1180,371 @@
     return wrap;
   }
 
+  // ---- Analytics: per-patient risk/protective classification, built from
+  // already-exported RPL_Results.xlsx / Control_Results.xlsx sheets (not
+  // from raw PDF/Excel lab reports) — reads the same 5 reference alleles
+  // RPL_REFERENCE_DATA already classifies (2 high_risk, 3 protective) back
+  // out of that export's one-row-per-allele layout. ----
+
+  const RISK_ALLELES = ["C*12:02", "DQB1*02:01"];
+  const PROTECTIVE_ALLELES = ["C*07:02", "DQB1*02:02", "DQB1*06:03"];
+
+  // alleles: the set of the 5 reference alleles this patient's exported
+  // rows carried (already matched/deduped by compareToReference when the
+  // sheet was first built — no re-matching happens here).
+  function classifyPatient(alleles) {
+    const risk = RISK_ALLELES.filter((a) => alleles.includes(a));
+    const protective = PROTECTIVE_ALLELES.filter((a) => alleles.includes(a));
+
+    if (!risk.length && !protective.length) return { category: "none", subKey: null };
+    if (risk.length && !protective.length) return { category: "risk", subKey: risk.join(" + ") };
+    if (!risk.length && protective.length) return { category: "protective", subKey: protective.join(" + ") };
+    return { category: "mixed", subKey: [...risk, ...protective].join(" + ") };
+  }
+
+  // Reads back an already-exported results sheet (same "Results" sheet,
+  // same RPL_RESULTS_HEADERS shape) and reconstructs each patient's allele
+  // set from its one-row-per-allele layout: a row with a Patient Name
+  // starts a new patient; blank-name rows belong to the most recent one. A
+  // patient whose only row is the "-" no-match placeholder gets an empty
+  // allele list (classifies as "None").
+  async function parseExportedResultsSheet(file) {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const sheetName = wb.SheetNames.includes("Results") ? "Results" : wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1 }).slice(1);
+
+    const patients = [];
+    rows.forEach((row) => {
+      const name = row && row[0];
+      if (name) patients.push({ name: String(name), age: (row[1] || "").toString(), alleles: [] });
+      if (!patients.length) return; // malformed sheet — no patient yet to attach this row to
+      const allele = row[2];
+      if (allele && allele !== "-") patients[patients.length - 1].alleles.push(String(allele));
+    });
+    return patients;
+  }
+
+  const ANALYTICS_CATEGORIES = [
+    { key: "none", label: "None" },
+    { key: "risk", label: "Risk only" },
+    { key: "protective", label: "Protective only" },
+    { key: "mixed", label: "Mixed" },
+  ];
+
+  // Builds both the top-level None/Risk/Protective/Mixed counts and, for
+  // the three categories that have one, a breakdown by the specific
+  // allele combination observed — only combinations that actually
+  // occurred are included, rather than every theoretically possible one.
+  function buildAnalyticsAggregates(rplPatients, controlPatients) {
+    const counts = {};
+    ANALYTICS_CATEGORIES.forEach((c) => (counts[c.key] = { rpl: 0, control: 0 }));
+    const subBreakdowns = { risk: {}, protective: {}, mixed: {} };
+
+    const tally = (patients, side) => {
+      (patients || []).forEach((patient) => {
+        const { category, subKey } = classifyPatient(patient.alleles);
+        counts[category][side] += 1;
+        if (subKey) {
+          if (!subBreakdowns[category][subKey]) subBreakdowns[category][subKey] = { rpl: 0, control: 0 };
+          subBreakdowns[category][subKey][side] += 1;
+        }
+      });
+    };
+    tally(rplPatients, "rpl");
+    tally(controlPatients, "control");
+
+    return { counts, subBreakdowns };
+  }
+
+  // ---- Analytics chart (plain SVG, no charting library) ----
+
+  const ANALYTICS_COLORS = { rpl: "#D4537E", control: "#1D9E75" };
+
+  // entries: [{ key, label, rpl, control, clickable }]. Height scales
+  // proportionally to the largest value in THIS chart (main view and a
+  // drill-down each scale independently), with the count printed above
+  // each bar. A clickable entry gets an invisible full-column hit target
+  // over both its bars so clicking anywhere in that category triggers
+  // onBarClick, not just the bars themselves.
+  function renderGroupedBarChart(entries, { onBarClick } = {}) {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const barWidth = 34;
+    const barGap = 6;
+    const groupGap = 46;
+    const groupWidth = barWidth * 2 + barGap;
+    const marginLeft = 30;
+    const marginRight = 20;
+    const marginTop = 30;
+    const marginBottom = 60;
+    const chartHeight = 200;
+
+    const maxValue = Math.max(1, ...entries.flatMap((e) => [e.rpl, e.control]));
+    const width = marginLeft + marginRight + entries.length * groupWidth + Math.max(0, entries.length - 1) * groupGap;
+    const height = marginTop + chartHeight + marginBottom;
+
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("class", "analytics-chart-svg");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Bar chart of patient counts by category, RPL vs Control");
+
+    const baseline = document.createElementNS(svgNS, "line");
+    baseline.setAttribute("x1", marginLeft - 10);
+    baseline.setAttribute("x2", width - marginRight);
+    baseline.setAttribute("y1", marginTop + chartHeight);
+    baseline.setAttribute("y2", marginTop + chartHeight);
+    baseline.setAttribute("class", "analytics-chart-baseline");
+    svg.appendChild(baseline);
+
+    entries.forEach((entry, i) => {
+      const groupX = marginLeft + i * (groupWidth + groupGap);
+      const group = document.createElementNS(svgNS, "g");
+      group.setAttribute("class", `analytics-bar-group${entry.clickable ? " analytics-bar-group--clickable" : ""}`);
+
+      [
+        { value: entry.rpl, x: groupX, color: ANALYTICS_COLORS.rpl },
+        { value: entry.control, x: groupX + barWidth + barGap, color: ANALYTICS_COLORS.control },
+      ].forEach(({ value, x, color }) => {
+        const barHeight = (value / maxValue) * chartHeight;
+        const y = marginTop + chartHeight - barHeight;
+
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", x);
+        rect.setAttribute("y", y);
+        rect.setAttribute("width", barWidth);
+        rect.setAttribute("height", Math.max(barHeight, value > 0 ? 2 : 0));
+        rect.setAttribute("fill", color);
+        rect.setAttribute("rx", 3);
+        group.appendChild(rect);
+
+        const countLabel = document.createElementNS(svgNS, "text");
+        countLabel.setAttribute("x", x + barWidth / 2);
+        countLabel.setAttribute("y", y - 6);
+        countLabel.setAttribute("text-anchor", "middle");
+        countLabel.setAttribute("class", "analytics-chart-count");
+        countLabel.textContent = String(value);
+        group.appendChild(countLabel);
+      });
+
+      const labelY = marginTop + chartHeight + 20;
+      const labelX = groupX + groupWidth / 2;
+      const categoryLabel = document.createElementNS(svgNS, "text");
+      categoryLabel.setAttribute("x", labelX);
+      categoryLabel.setAttribute("y", labelY);
+      categoryLabel.setAttribute("text-anchor", entry.label.length > 12 ? "end" : "middle");
+      categoryLabel.setAttribute("class", "analytics-chart-label");
+      categoryLabel.textContent = entry.label;
+      if (entry.label.length > 12) {
+        categoryLabel.setAttribute("transform", `rotate(-25 ${labelX} ${labelY})`);
+      }
+      group.appendChild(categoryLabel);
+
+      if (entry.clickable && onBarClick) {
+        const hit = document.createElementNS(svgNS, "rect");
+        hit.setAttribute("x", groupX - groupGap / 2);
+        hit.setAttribute("y", 0);
+        hit.setAttribute("width", groupWidth + groupGap);
+        hit.setAttribute("height", height);
+        hit.setAttribute("fill", "transparent");
+        hit.setAttribute("class", "analytics-bar-hit");
+        hit.addEventListener("click", () => onBarClick(entry.key));
+        group.appendChild(hit);
+      }
+
+      svg.appendChild(group);
+    });
+
+    return svg;
+  }
+
+  function renderAnalyticsLegend() {
+    const legend = document.createElement("div");
+    legend.className = "analytics-chart-legend";
+    [
+      { label: "RPL", color: ANALYTICS_COLORS.rpl },
+      { label: "Control", color: ANALYTICS_COLORS.control },
+    ].forEach(({ label, color }) => {
+      const item = document.createElement("span");
+      item.className = "analytics-legend-item";
+      item.innerHTML = `<span class="analytics-legend-swatch" style="background:${color}"></span>${label}`;
+      legend.appendChild(item);
+    });
+    return legend;
+  }
+
+  // container: the always-present chart area — swaps its content between
+  // the main 4-category view and a category's drill-down view (with a
+  // Back button), rather than showing both/needing a second container.
+  function renderAnalyticsChart(container, aggregates) {
+    container.hidden = false;
+
+    function renderMain() {
+      container.innerHTML = "";
+      container.appendChild(renderAnalyticsLegend());
+
+      const entries = ANALYTICS_CATEGORIES.map((c) => ({
+        key: c.key,
+        label: c.label,
+        rpl: aggregates.counts[c.key].rpl,
+        control: aggregates.counts[c.key].control,
+        clickable: c.key !== "none" && Object.keys(aggregates.subBreakdowns[c.key] || {}).length > 0,
+      }));
+
+      container.appendChild(renderGroupedBarChart(entries, { onBarClick: renderDrilldown }));
+    }
+
+    function renderDrilldown(categoryKey) {
+      container.innerHTML = "";
+
+      const backBtn = document.createElement("button");
+      backBtn.type = "button";
+      backBtn.className = "analytics-back-btn";
+      backBtn.innerHTML = `<span aria-hidden="true">&larr;</span> Back`;
+      backBtn.addEventListener("click", renderMain);
+      container.appendChild(backBtn);
+
+      const categoryLabel = ANALYTICS_CATEGORIES.find((c) => c.key === categoryKey).label;
+      const title = document.createElement("h4");
+      title.className = "analytics-drilldown-title";
+      title.textContent = `${categoryLabel} — by allele combination`;
+      container.appendChild(title);
+
+      container.appendChild(renderAnalyticsLegend());
+
+      const subEntries = Object.entries(aggregates.subBreakdowns[categoryKey] || {})
+        .map(([subKey, values]) => ({ key: subKey, label: subKey, rpl: values.rpl, control: values.control, clickable: false }))
+        .sort((a, b) => b.rpl + b.control - (a.rpl + a.control));
+
+      container.appendChild(renderGroupedBarChart(subEntries, {}));
+    }
+
+    renderMain();
+  }
+
+  // ---- Analytics upload cards (lighter than createUploadCard — this
+  // just reads an already-exported results sheet back in, once, with no
+  // reference comparison or multi-report accumulation to manage) ----
+
+  function createAnalyticsUploadCard({ label, onLoaded }) {
+    const card = document.createElement("div");
+    card.className = "upload-card input-panel";
+
+    const title = document.createElement("h3");
+    title.className = "upload-card-title";
+    title.textContent = label;
+    card.appendChild(title);
+
+    const dropzone = document.createElement("div");
+    dropzone.className = "dropzone";
+    dropzone.tabIndex = 0;
+    dropzone.setAttribute("role", "button");
+    dropzone.setAttribute("aria-label", `Upload ${label}`);
+    dropzone.innerHTML = `
+      <div class="dropzone-icon">${DROPZONE_ICON}</div>
+      <p class="dropzone-text">Choose file or drag it here</p>
+    `;
+    card.appendChild(dropzone);
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx";
+    input.className = "dropzone-input";
+    card.appendChild(input);
+
+    const status = document.createElement("p");
+    status.className = "upload-status-text";
+    status.hidden = true;
+    card.appendChild(status);
+
+    async function handleFile(file) {
+      if (!file) return;
+      if (!isExcelFile(file)) {
+        status.hidden = false;
+        status.className = "upload-status-text is-error";
+        status.textContent = "Please upload an Excel (.xlsx) results sheet.";
+        return;
+      }
+      status.hidden = false;
+      status.className = "upload-status-text";
+      status.textContent = `Reading ${file.name}…`;
+      try {
+        const patients = await parseExportedResultsSheet(file);
+        status.className = "upload-status-text is-success";
+        status.textContent = `Loaded ${patients.length} patient(s) from ${file.name}`;
+        onLoaded(patients);
+      } catch (err) {
+        status.className = "upload-status-text is-error";
+        status.textContent = `Could not read "${file.name}": ${err.message}`;
+        onLoaded(null);
+      }
+    }
+
+    dropzone.addEventListener("click", () => input.click());
+    dropzone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        input.click();
+      }
+    });
+    dropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      dropzone.classList.add("dropzone-active");
+    });
+    dropzone.addEventListener("dragleave", () => {
+      dropzone.classList.remove("dropzone-active");
+    });
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dropzone.classList.remove("dropzone-active");
+      handleFile(event.dataTransfer.files[0]);
+    });
+    input.addEventListener("change", () => {
+      handleFile(input.files[0]);
+      input.value = "";
+    });
+
+    return card;
+  }
+
+  let analyticsAreaRendered = false;
+  const analyticsData = { rpl: null, control: null };
+
+  function renderAnalyticsArea() {
+    if (analyticsAreaRendered) return;
+
+    const viewBtn = document.getElementById("view-analytics-btn");
+    const chartContainer = document.getElementById("analytics-chart-container");
+
+    const updateViewBtnState = () => {
+      viewBtn.disabled = !analyticsData.rpl && !analyticsData.control;
+    };
+
+    const rplCard = createAnalyticsUploadCard({
+      label: "Add RPL Results Sheet",
+      onLoaded: (patients) => {
+        analyticsData.rpl = patients;
+        updateViewBtnState();
+      },
+    });
+    const controlCard = createAnalyticsUploadCard({
+      label: "Add Control Results Sheet",
+      onLoaded: (patients) => {
+        analyticsData.control = patients;
+        updateViewBtnState();
+      },
+    });
+
+    document.getElementById("analytics-rpl-input-container").appendChild(rplCard);
+    document.getElementById("analytics-control-input-container").appendChild(controlCard);
+
+    viewBtn.addEventListener("click", () => {
+      renderAnalyticsChart(chartContainer, buildAnalyticsAggregates(analyticsData.rpl, analyticsData.control));
+    });
+
+    analyticsAreaRendered = true;
+  }
+
   // ---- Upload card UI ----
 
   const DROPZONE_ICON = `
@@ -1706,15 +2071,17 @@
   const viewSingle = document.getElementById("view-single");
   const viewRpl = document.getElementById("view-rpl");
   const viewControl = document.getElementById("view-control");
+  const viewAnalytics = document.getElementById("view-analytics");
   const topbarPageTitle = document.getElementById("topbar-page-title");
 
-  const ALL_VIEWS = [viewHome, viewSingle, viewRpl, viewControl];
+  const ALL_VIEWS = [viewHome, viewSingle, viewRpl, viewControl, viewAnalytics];
 
   const PAGE_TITLES = {
     "view-home": "Analysis Selection",
     "view-single": "Single Analysis",
     "view-rpl": "RPL",
     "view-control": "Non RPL Control",
+    "view-analytics": "Analytics",
   };
 
   function showView(view) {
@@ -1739,16 +2106,21 @@
     showView(viewControl);
   }
 
+  function goToAnalyticsPage() {
+    renderAnalyticsArea();
+    showView(viewAnalytics);
+  }
+
   function goToHomeView() {
     showView(viewHome);
   }
 
-  ["back-to-sections-single", "back-to-sections-rpl", "back-to-sections-control"].forEach((id) => {
+  ["back-to-sections-single", "back-to-sections-rpl", "back-to-sections-control", "back-to-sections-analytics"].forEach((id) => {
     const btn = document.getElementById(id);
     if (btn) btn.addEventListener("click", goToHomeView);
   });
 
-  ["breadcrumb-single-rpl", "breadcrumb-single-control"].forEach((id) => {
+  ["breadcrumb-single-rpl", "breadcrumb-single-control", "breadcrumb-single-analytics"].forEach((id) => {
     const btn = document.getElementById(id);
     if (btn) btn.addEventListener("click", goToSinglePage);
   });
