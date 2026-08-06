@@ -1026,11 +1026,11 @@
     return rows;
   }
 
-  function downloadRplResults(patients) {
+  function downloadRplResults(patients, fileName = "RPL_Results.xlsx") {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([RPL_RESULTS_HEADERS, ...buildRplResultsRows(patients)]);
     XLSX.utils.book_append_sheet(wb, ws, "Results");
-    XLSX.writeFile(wb, "RPL_Results.xlsx");
+    XLSX.writeFile(wb, fileName);
   }
 
   // A page can't silently write back into a file already saved on disk —
@@ -1039,7 +1039,7 @@
   // (whatever it already had), and download one combined file with this
   // batch's new rows appended after them. The user still has to save that
   // over the original themselves.
-  async function mergeAndDownloadRplResults(patients, existingFile) {
+  async function mergeAndDownloadRplResults(patients, existingFile, fileName = "RPL_Results.xlsx") {
     const buf = await existingFile.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
     const sheetName = wb.SheetNames.includes("Results") ? "Results" : wb.SheetNames[0];
@@ -1050,7 +1050,7 @@
     const wbOut = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([RPL_RESULTS_HEADERS, ...combinedRows]);
     XLSX.utils.book_append_sheet(wbOut, ws, "Results");
-    XLSX.writeFile(wbOut, "RPL_Results.xlsx");
+    XLSX.writeFile(wbOut, fileName);
   }
 
   // Only one export dropdown can be open at a time across the whole page,
@@ -1064,7 +1064,7 @@
     }
   });
 
-  function renderExportMenu(patients) {
+  function renderExportMenu(patients, fileName = "RPL_Results.xlsx") {
     const wrap = document.createElement("div");
     wrap.className = "export-menu";
 
@@ -1085,7 +1085,7 @@
     newFileBtn.textContent = "Start a new file";
     newFileBtn.addEventListener("click", () => {
       menu.hidden = true;
-      downloadRplResults(patients);
+      downloadRplResults(patients, fileName);
     });
     menu.appendChild(newFileBtn);
 
@@ -1098,7 +1098,7 @@
       mergeInput.value = "";
       if (!file) return;
       try {
-        await mergeAndDownloadRplResults(patients, file);
+        await mergeAndDownloadRplResults(patients, file, fileName);
       } catch (err) {
         window.alert(`Could not read "${file.name}" as an Excel file: ${err.message}`);
       }
@@ -1142,6 +1142,7 @@
     compareReferencePdf,
     compareReferenceExcel = compareReferencePdf,
     resultsHeading = "Analysis Results",
+    resultsFileName = "RPL_Results.xlsx",
     acceptExcel = true,
     onStep,
   }) {
@@ -1368,7 +1369,7 @@
 
       if (compareReferencePdf && patients.length) {
         previewWrap.appendChild(renderResultsTable(patients));
-        resultsHeaderActions.appendChild(renderExportMenu(patients));
+        resultsHeaderActions.appendChild(renderExportMenu(patients, resultsFileName));
       } else if (!compareReferencePdf && extractionRows.length) {
         previewWrap.appendChild(renderExtractionTable(columns, extractionRows));
       }
@@ -1423,7 +1424,7 @@
           sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
           alleles: allelesFromExcelRow(excelSheet.headers, row),
         }));
-        resultsHeaderActions.appendChild(renderExportMenu(allPatients));
+        resultsHeaderActions.appendChild(renderExportMenu(allPatients, resultsFileName));
 
         if (totalRows > EXCEL_ROW_LIMIT) {
           const footer = document.createElement("div");
@@ -1614,6 +1615,7 @@
       compareReferencePdf: false,
       compareReferenceExcel: true,
       resultsHeading: "Control Analysis Results",
+      resultsFileName: "Control_Results.xlsx",
       onStep: (step) => {
         stepStates.control = step;
         syncBreadcrumb();
