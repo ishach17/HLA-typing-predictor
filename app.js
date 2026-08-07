@@ -906,11 +906,23 @@
     return LOCUS_KEYS.includes(locus) ? `${locus}/${match[2]}` : null;
   }
 
+  // Some sheets store the full allele designation in the cell — e.g.
+  // "DQB1*02:01:01" instead of a bare "02:01:01" — with the locus symbol
+  // already baked in. compareToReference() builds its own lookup key as
+  // "<locus>*<fields>" from the column's locus, so a value that already
+  // carries a locus prefix would double up into something like
+  // "DQB1*DQB1*02:01" and never match anything. Strip it here so the
+  // stored value is always just the bare field numbers, regardless of
+  // which convention the source sheet used.
+  function stripAllelePrefix(raw) {
+    return String(raw || "").trim().replace(/^(?:HLA-)?[A-Za-z0-9]+\*/, "");
+  }
+
   function allelesFromExcelRow(headers, row) {
     const alleles = {};
     headers.forEach((header, i) => {
       const key = normalizeAlleleHeader(header);
-      if (key) alleles[key] = formatExcelCellValue(row[i]);
+      if (key) alleles[key] = stripAllelePrefix(formatExcelCellValue(row[i]));
     });
     return alleles;
   }
