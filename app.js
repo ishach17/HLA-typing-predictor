@@ -1561,217 +1561,304 @@
     return legend;
   }
 
-  // A small, dismissible panel (not a full-screen view) listing the exact
-  // patients behind a bar — a deterministic lookup against
-  // patientsByCategory/patientsBySubKey, no recomputation. patientsBySide:
-  // { rpl: [...patients], control: [...patients] }, each patient already
-  // shaped { name, age, alleles: [{ allele, homozygous }] } by
-  // parseExportedResultsSheet().
-  function renderAnalyticsPatientList(bucketLabel, patientsBySide) {
+  // Same visual language as renderGroupedBarChart (colors/labels/fonts
+  // untouched — same CSS classes) but a single series instead of a
+  // grouped pair, for the per-column (RPL-only or Control-only) charts in
+  // the two-column breakdown region.
+  function renderSingleSeriesBarChart(entries, color, { onBarClick } = {}) {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const barWidth = 34;
+    const groupGap = 30;
+    const marginLeft = 26;
+    const marginRight = 16;
+    const marginTop = 26;
+    const chartHeight = 140;
+    const labelLineHeight = 14;
+
+    const labelLines = entries.map((e) => e.label.split(" + "));
+    const maxLines = Math.max(1, ...labelLines.map((lines) => lines.length));
+    const marginBottom = 24 + maxLines * labelLineHeight;
+
+    const maxValue = Math.max(1, ...entries.map((e) => e.value));
+    const width = marginLeft + marginRight + entries.length * barWidth + Math.max(0, entries.length - 1) * groupGap;
+    const height = marginTop + chartHeight + marginBottom;
+
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("class", "analytics-chart-svg");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Bar chart of patient counts by allele combination");
+
+    const baseline = document.createElementNS(svgNS, "line");
+    baseline.setAttribute("x1", marginLeft - 8);
+    baseline.setAttribute("x2", width - marginRight);
+    baseline.setAttribute("y1", marginTop + chartHeight);
+    baseline.setAttribute("y2", marginTop + chartHeight);
+    baseline.setAttribute("class", "analytics-chart-baseline");
+    svg.appendChild(baseline);
+
+    entries.forEach((entry, i) => {
+      const x = marginLeft + i * (barWidth + groupGap);
+      const group = document.createElementNS(svgNS, "g");
+      group.setAttribute("class", `analytics-bar-group${onBarClick ? " analytics-bar-group--clickable" : ""}`);
+
+      const barHeight = (entry.value / maxValue) * chartHeight;
+      const y = marginTop + chartHeight - barHeight;
+
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", x);
+      rect.setAttribute("y", y);
+      rect.setAttribute("width", barWidth);
+      rect.setAttribute("height", Math.max(barHeight, entry.value > 0 ? 2 : 0));
+      rect.setAttribute("fill", color);
+      rect.setAttribute("rx", 3);
+      group.appendChild(rect);
+
+      const countLabel = document.createElementNS(svgNS, "text");
+      countLabel.setAttribute("x", x + barWidth / 2);
+      countLabel.setAttribute("y", y - 6);
+      countLabel.setAttribute("text-anchor", "middle");
+      countLabel.setAttribute("class", "analytics-chart-count");
+      countLabel.textContent = String(entry.value);
+      group.appendChild(countLabel);
+
+      const labelX = x + barWidth / 2;
+      labelLines[i].forEach((line, lineIdx) => {
+        const lineLabel = document.createElementNS(svgNS, "text");
+        lineLabel.setAttribute("x", labelX);
+        lineLabel.setAttribute("y", marginTop + chartHeight + 20 + lineIdx * labelLineHeight);
+        lineLabel.setAttribute("text-anchor", "middle");
+        lineLabel.setAttribute("class", "analytics-chart-label");
+        lineLabel.textContent = lineIdx === 0 ? line : `+ ${line}`;
+        group.appendChild(lineLabel);
+      });
+
+      if (onBarClick) {
+        const hit = document.createElementNS(svgNS, "rect");
+        hit.setAttribute("x", x - groupGap / 2);
+        hit.setAttribute("y", 0);
+        hit.setAttribute("width", barWidth + groupGap);
+        hit.setAttribute("height", height);
+        hit.setAttribute("fill", "transparent");
+        hit.setAttribute("class", "analytics-bar-hit");
+        hit.addEventListener("click", () => onBarClick(entry.key));
+        group.appendChild(hit);
+      }
+
+      svg.appendChild(group);
+    });
+
+    return svg;
+  }
+
+  // The patient list for one column (one side) — same row markup/classes
+  // as before, just without the panel header/close button, since the
+  // whole two-column region already has one Back control. Scrolls inside
+  // its own fixed-height container instead of growing the page.
+  function renderPatientListForSide(patients) {
+    const wrap = document.createElement("div");
+    wrap.className = "analytics-breakdown-patient-list-wrap";
+
+    if (!patients.length) {
+      const empty = document.createElement("p");
+      empty.className = "analytics-patient-list-empty";
+      empty.textContent = "No patients in this category.";
+      wrap.appendChild(empty);
+      return wrap;
+    }
+
+    const count = document.createElement("p");
+    count.className = "analytics-patient-list-side-heading";
+    count.textContent = `${patients.length} patient(s)`;
+    wrap.appendChild(count);
+
+    const list = document.createElement("ul");
+    list.className = "analytics-patient-list";
+    patients.forEach((patient) => {
+      const item = document.createElement("li");
+      item.className = "analytics-patient-list-item";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "analytics-patient-list-name";
+      nameSpan.textContent = patient.age ? `${patient.name} (${patient.age})` : patient.name;
+      item.appendChild(nameSpan);
+
+      const alleleWrap = document.createElement("span");
+      alleleWrap.className = "analytics-patient-list-alleles";
+      if (!patient.alleles.length) {
+        alleleWrap.textContent = "No tracked alleles";
+      } else {
+        patient.alleles.forEach((a) => {
+          const tag = document.createElement("span");
+          tag.className = "analytics-allele-tag";
+          tag.textContent = a.allele;
+          if (a.homozygous) {
+            const homoBadge = document.createElement("span");
+            homoBadge.className = "homozygous-badge";
+            homoBadge.textContent = "×2";
+            homoBadge.title = "Homozygous — same allele inherited from both parents";
+            tag.appendChild(homoBadge);
+          }
+          alleleWrap.appendChild(tag);
+        });
+      }
+      item.appendChild(alleleWrap);
+
+      list.appendChild(item);
+    });
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function renderAnalyticsSummaryPanel(summaryText) {
     const panel = document.createElement("div");
-    panel.className = "analytics-patient-list-panel";
+    panel.className = "analytics-summary-panel";
 
     const header = document.createElement("div");
-    header.className = "analytics-patient-list-header";
+    header.className = "analytics-summary-panel-header";
     const title = document.createElement("h4");
-    title.className = "analytics-patient-list-title";
-    title.textContent = `Patients — ${bucketLabel}`;
+    title.className = "analytics-summary-panel-title";
+    title.textContent = "Summary";
     header.appendChild(title);
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "analytics-panel-close";
     closeBtn.innerHTML = "&times;";
-    closeBtn.setAttribute("aria-label", "Close patient list");
+    closeBtn.setAttribute("aria-label", "Close summary");
     closeBtn.addEventListener("click", () => panel.remove());
     header.appendChild(closeBtn);
     panel.appendChild(header);
 
-    const sides = [
-      { key: "rpl", label: "RPL", color: ANALYTICS_COLORS.rpl },
-      { key: "control", label: "Control", color: ANALYTICS_COLORS.control },
-    ];
-
-    let totalShown = 0;
-    sides.forEach(({ key, label, color }) => {
-      const patients = (patientsBySide && patientsBySide[key]) || [];
-      if (!patients.length) return;
-      totalShown += patients.length;
-
-      const sideHeading = document.createElement("p");
-      sideHeading.className = "analytics-patient-list-side-heading";
-      sideHeading.innerHTML = `<span class="analytics-legend-swatch" style="background:${color}"></span>${label} (${patients.length})`;
-      panel.appendChild(sideHeading);
-
-      const list = document.createElement("ul");
-      list.className = "analytics-patient-list";
-      patients.forEach((patient) => {
-        const item = document.createElement("li");
-        item.className = "analytics-patient-list-item";
-
-        const nameSpan = document.createElement("span");
-        nameSpan.className = "analytics-patient-list-name";
-        nameSpan.textContent = patient.age ? `${patient.name} (${patient.age})` : patient.name;
-        item.appendChild(nameSpan);
-
-        const alleleWrap = document.createElement("span");
-        alleleWrap.className = "analytics-patient-list-alleles";
-        if (!patient.alleles.length) {
-          alleleWrap.textContent = "No tracked alleles";
-        } else {
-          patient.alleles.forEach((a) => {
-            const tag = document.createElement("span");
-            tag.className = "analytics-allele-tag";
-            tag.textContent = a.allele;
-            if (a.homozygous) {
-              const homoBadge = document.createElement("span");
-              homoBadge.className = "homozygous-badge";
-              homoBadge.textContent = "×2";
-              homoBadge.title = "Homozygous — same allele inherited from both parents";
-              tag.appendChild(homoBadge);
-            }
-            alleleWrap.appendChild(tag);
-          });
-        }
-        item.appendChild(alleleWrap);
-
-        list.appendChild(item);
-      });
-      panel.appendChild(list);
-    });
-
-    if (!totalShown) {
-      const empty = document.createElement("p");
-      empty.className = "analytics-patient-list-empty";
-      empty.textContent = "No patients in this category.";
-      panel.appendChild(empty);
-    }
+    const text = document.createElement("p");
+    text.className = "analytics-summary-text";
+    text.textContent = summaryText;
+    panel.appendChild(text);
 
     return panel;
   }
 
-  // container: the always-present chart area — swaps its content between
-  // the main 4-category view and a category's drill-down view (with a
-  // Back button), rather than showing both/needing a second container.
-  // summaryText: the generateSummary() paragraph, precomputed once by the
-  // caller — only shown on the main view (it's a whole-dataset summary,
-  // not scoped to whichever category you've drilled into).
+  // Layout: [legend + View Summary toggle] -> [main 4-category chart,
+  // always visible] -> [two-column breakdown region, hidden until a
+  // category is clicked]. Clicking a category never tears down or
+  // replaces the main chart above it — it only opens/updates the region
+  // below it, so there's no scrolling to reach it and no scroll position
+  // to restore on Back. Each column is independently RPL-only or
+  // Control-only: its own single-series sub-chart (if the category has a
+  // breakdown — "None" doesn't) feeding its own patient list, which
+  // starts showing every patient in the category and narrows to one
+  // specific combination when you click a bar in that column's own chart.
   function renderAnalyticsChart(container, aggregates, summaryText) {
     container.hidden = false;
-    let patientListPanel = null;
+    container.innerHTML = "";
 
-    function closePatientList() {
-      if (patientListPanel) {
-        patientListPanel.remove();
-        patientListPanel = null;
-      }
+    const headerRow = document.createElement("div");
+    headerRow.className = "analytics-chart-header-row";
+    headerRow.appendChild(renderAnalyticsLegend());
+    container.appendChild(headerRow);
+
+    if (summaryText) {
+      const summaryRow = document.createElement("div");
+      summaryRow.className = "analytics-summary-row";
+      const summaryBtn = document.createElement("button");
+      summaryBtn.type = "button";
+      summaryBtn.className = "analytics-summary-btn";
+      summaryBtn.textContent = "View Summary";
+      summaryBtn.addEventListener("click", () => {
+        const existing = container.querySelector(".analytics-summary-panel");
+        if (existing) {
+          existing.remove();
+          return;
+        }
+        summaryRow.after(renderAnalyticsSummaryPanel(summaryText));
+      });
+      summaryRow.appendChild(summaryBtn);
+      container.appendChild(summaryRow);
     }
 
-    function showPatientList(label, patientsBySide) {
-      closePatientList();
-      patientListPanel = renderAnalyticsPatientList(label, patientsBySide);
-      container.appendChild(patientListPanel);
+    const mainChartWrap = document.createElement("div");
+    mainChartWrap.className = "analytics-main-chart-wrap";
+    container.appendChild(mainChartWrap);
+
+    const breakdownRegion = document.createElement("div");
+    breakdownRegion.className = "analytics-breakdown-region";
+    breakdownRegion.hidden = true;
+    container.appendChild(breakdownRegion);
+
+    function closeBreakdown() {
+      breakdownRegion.hidden = true;
+      breakdownRegion.innerHTML = "";
     }
 
-    function renderMain() {
-      container.innerHTML = "";
-      patientListPanel = null;
-      container.appendChild(renderAnalyticsLegend());
-
-      const entries = ANALYTICS_CATEGORIES.map((c) => ({
-        key: c.key,
-        label: c.label,
-        rpl: aggregates.counts[c.key].rpl,
-        control: aggregates.counts[c.key].control,
-      }));
-
-      container.appendChild(
-        renderGroupedBarChart(entries, {
-          onBarClick: (categoryKey) => {
-            const hasSubBreakdown = Object.keys(aggregates.subBreakdowns[categoryKey] || {}).length > 0;
-            if (hasSubBreakdown) {
-              renderDrilldown(categoryKey);
-            } else {
-              const label = ANALYTICS_CATEGORIES.find((c) => c.key === categoryKey).label;
-              showPatientList(label, aggregates.patientsByCategory[categoryKey]);
-            }
-          },
-        })
-      );
-
-      if (summaryText) {
-        const summaryRow = document.createElement("div");
-        summaryRow.className = "analytics-summary-row";
-        const summaryBtn = document.createElement("button");
-        summaryBtn.type = "button";
-        summaryBtn.className = "analytics-summary-btn";
-        summaryBtn.textContent = "View Summary";
-        summaryBtn.addEventListener("click", () => {
-          closePatientList();
-          const existing = container.querySelector(".analytics-summary-panel");
-          if (existing) existing.remove();
-
-          const panel = document.createElement("div");
-          panel.className = "analytics-summary-panel";
-          const panelHeader = document.createElement("div");
-          panelHeader.className = "analytics-summary-panel-header";
-          const panelTitle = document.createElement("h4");
-          panelTitle.className = "analytics-summary-panel-title";
-          panelTitle.textContent = "Summary";
-          panelHeader.appendChild(panelTitle);
-          const closeBtn = document.createElement("button");
-          closeBtn.type = "button";
-          closeBtn.className = "analytics-panel-close";
-          closeBtn.innerHTML = "&times;";
-          closeBtn.setAttribute("aria-label", "Close summary");
-          closeBtn.addEventListener("click", () => panel.remove());
-          panelHeader.appendChild(closeBtn);
-          panel.appendChild(panelHeader);
-
-          const text = document.createElement("p");
-          text.className = "analytics-summary-text";
-          text.textContent = summaryText;
-          panel.appendChild(text);
-
-          container.appendChild(panel);
-        });
-        summaryRow.appendChild(summaryBtn);
-        container.appendChild(summaryRow);
-      }
-    }
-
-    function renderDrilldown(categoryKey) {
-      container.innerHTML = "";
-      patientListPanel = null;
+    function openBreakdown(categoryKey) {
+      breakdownRegion.innerHTML = "";
+      breakdownRegion.hidden = false;
 
       const backBtn = document.createElement("button");
       backBtn.type = "button";
       backBtn.className = "analytics-back-btn";
       backBtn.innerHTML = `<span aria-hidden="true">&larr;</span> Back`;
-      backBtn.addEventListener("click", renderMain);
-      container.appendChild(backBtn);
+      backBtn.addEventListener("click", closeBreakdown);
+      breakdownRegion.appendChild(backBtn);
 
       const categoryLabel = ANALYTICS_CATEGORIES.find((c) => c.key === categoryKey).label;
       const title = document.createElement("h4");
       title.className = "analytics-drilldown-title";
-      title.textContent = `${categoryLabel} — by allele combination`;
-      container.appendChild(title);
+      title.textContent = categoryLabel;
+      breakdownRegion.appendChild(title);
 
-      container.appendChild(renderAnalyticsLegend());
+      const grid = document.createElement("div");
+      grid.className = "analytics-breakdown-grid";
 
-      const subEntries = Object.entries(aggregates.subBreakdowns[categoryKey] || {})
-        .map(([subKey, values]) => ({ key: subKey, label: subKey, rpl: values.rpl, control: values.control }))
-        .sort((a, b) => b.rpl + b.control - (a.rpl + a.control));
+      [
+        { side: "rpl", label: "RPL", color: ANALYTICS_COLORS.rpl },
+        { side: "control", label: "Control", color: ANALYTICS_COLORS.control },
+      ].forEach(({ side, label, color }) => {
+        const column = document.createElement("div");
+        column.className = "analytics-breakdown-column";
 
-      container.appendChild(
-        renderGroupedBarChart(subEntries, {
-          onBarClick: (subKey) => {
-            showPatientList(`${categoryLabel} — ${subKey}`, aggregates.patientsBySubKey[categoryKey][subKey]);
-          },
-        })
-      );
+        const heading = document.createElement("p");
+        heading.className = "analytics-breakdown-column-heading analytics-legend-item";
+        heading.innerHTML = `<span class="analytics-legend-swatch" style="background:${color}"></span>${label}`;
+        column.appendChild(heading);
+
+        const subEntries = Object.entries(aggregates.subBreakdowns[categoryKey] || {})
+          .map(([subKey, values]) => ({ key: subKey, label: subKey, value: values[side] }))
+          .filter((e) => e.value > 0)
+          .sort((a, b) => b.value - a.value);
+
+        const listSlot = document.createElement("div");
+
+        const showList = (patients) => {
+          listSlot.innerHTML = "";
+          listSlot.appendChild(renderPatientListForSide(patients));
+        };
+
+        if (subEntries.length) {
+          column.appendChild(
+            renderSingleSeriesBarChart(subEntries, color, {
+              onBarClick: (subKey) => {
+                showList((aggregates.patientsBySubKey[categoryKey][subKey] || {})[side] || []);
+              },
+            })
+          );
+        }
+
+        column.appendChild(listSlot);
+        showList((aggregates.patientsByCategory[categoryKey] || {})[side] || []);
+
+        grid.appendChild(column);
+      });
+
+      breakdownRegion.appendChild(grid);
     }
 
-    renderMain();
+    const entries = ANALYTICS_CATEGORIES.map((c) => ({
+      key: c.key,
+      label: c.label,
+      rpl: aggregates.counts[c.key].rpl,
+      control: aggregates.counts[c.key].control,
+    }));
+    mainChartWrap.appendChild(renderGroupedBarChart(entries, { onBarClick: openBreakdown }));
   }
 
   // ---- Analytics upload cards (lighter than createUploadCard — this
