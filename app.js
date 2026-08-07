@@ -554,9 +554,12 @@
   // patientAlleles is keyed like parseRplReport()'s own alleles object
   // ("A/1", "A/2", ... one raw string value per key). RPL_REFERENCE_DATA
   // comes from rplReferenceData.js.
+  // A patient carrying the same tracked allele at both copies of a locus
+  // (one from each parent) is counted once, not twice, but that's now
+  // recorded as `homozygous: true` on the single match rather than simply
+  // discarded — Analytics' patient list needs it for the "×2" badge.
   function compareToReference(patientAlleles, referenceData) {
-    const matches = [];
-    const seen = new Set();
+    const occurrences = new Map(); // key -> count (1 or 2)
 
     LOCUS_KEYS.forEach((locus) => {
       [1, 2].forEach((n) => {
@@ -568,16 +571,22 @@
         // dropped before matching.
         const twoField = raw.split(":").slice(0, 2).join(":");
         const key = `${locus}*${twoField}`;
+        if (!referenceData.alleles[key]) return;
 
-        if (seen.has(key)) return; // homozygous: count once, not twice
-        const entry = referenceData.alleles[key];
-        if (!entry) return;
-
-        seen.add(key);
-        matches.push({ allele: key, classification: entry.classification, referenceFrequency: entry.frequency });
+        occurrences.set(key, (occurrences.get(key) || 0) + 1);
       });
     });
 
+    const matches = [];
+    occurrences.forEach((count, key) => {
+      const entry = referenceData.alleles[key];
+      matches.push({
+        allele: key,
+        classification: entry.classification,
+        referenceFrequency: entry.frequency,
+        homozygous: count === 2,
+      });
+    });
     return matches;
   }
 
@@ -998,6 +1007,13 @@
         const alleleTd = document.createElement("td");
         alleleTd.className = "allele-cell";
         alleleTd.textContent = match.allele;
+        if (match.homozygous) {
+          const homoBadge = document.createElement("span");
+          homoBadge.className = "homozygous-badge";
+          homoBadge.textContent = "×2";
+          homoBadge.title = "Homozygous — same allele inherited from both parents";
+          alleleTd.appendChild(homoBadge);
+        }
         tr.appendChild(alleleTd);
 
         const classTd = document.createElement("td");
@@ -1065,6 +1081,12 @@
 
   const RPL_RESULTS_HEADERS = ["Patient Name", "Age", "Allele", "Classification", "Frequency"];
 
+  // Marks a homozygous match's Allele cell (e.g. "DQB1*02:01 (x2)") so that
+  // signal survives being written to a file and later read back by
+  // Analytics — compareToReference() only exposes it in-memory otherwise.
+  const HOMOZYGOUS_SUFFIX = " (x2)";
+  const HOMOZYGOUS_SUFFIX_REGEX = / \(x2\)$/i;
+
   // patients: array of { name, age, sampleNumber, alleles } — sampleNumber
   // isn't included in the export output, only name/age/alleles are. One row
   // per matched allele; a patient with no matches still gets one row with
@@ -1083,7 +1105,7 @@
         rows.push([
           matchIdx === 0 ? patient.name || "" : "",
           matchIdx === 0 ? patient.age || "" : "",
-          match.allele,
+          match.homozygous ? `${match.allele}${HOMOZYGOUS_SUFFIX}` : match.allele,
           classificationLabel(match.classification),
           `${(match.referenceFrequency * 100).toFixed(2)}%`,
         ]);
@@ -1199,12 +1221,13 @@
   const RISK_ALLELES = ["C*12:02", "DQB1*02:01"];
   const PROTECTIVE_ALLELES = ["C*07:02", "DQB1*02:02", "DQB1*06:03"];
 
-  // alleles: the set of the 5 reference alleles this patient's exported
-  // rows carried (already matched/deduped by compareToReference when the
-  // sheet was first built — no re-matching happens here).
+  // alleles: this patient's exported rows, as { allele, homozygous }
+  // entries — already matched/deduped by compareToReference when the
+  // sheet was first built, no re-matching happens here.
   function classifyPatient(alleles) {
-    const risk = RISK_ALLELES.filter((a) => alleles.includes(a));
-    const protective = PROTECTIVE_ALLELES.filter((a) => alleles.includes(a));
+    const carried = alleles.map((a) => a.allele);
+    const risk = RISK_ALLELES.filter((a) => carried.includes(a));
+    const protective = PROTECTIVE_ALLELES.filter((a) => carried.includes(a));
 
     if (!risk.length && !protective.length) return { category: "none", subKey: null };
     if (risk.length && !protective.length) return { category: "risk", subKey: risk.join(" + ") };
@@ -1217,7 +1240,9 @@
   // set from its one-row-per-allele layout: a row with a Patient Name
   // starts a new patient; blank-name rows belong to the most recent one. A
   // patient whose only row is the "-" no-match placeholder gets an empty
-  // allele list (classifies as "None").
+  // allele list (classifies as "None"). A trailing "(x2)" marks a
+  // homozygous match (see HOMOZYGOUS_SUFFIX) and is stripped back off into
+  // its own flag rather than left in the allele string.
   async function parseExportedResultsSheet(file) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array" });
@@ -1229,8 +1254,12 @@
       const name = row && row[0];
       if (name) patients.push({ name: String(name), age: (row[1] || "").toString(), alleles: [] });
       if (!patients.length) return; // malformed sheet — no patient yet to attach this row to
-      const allele = row[2];
-      if (allele && allele !== "-") patients[patients.length - 1].alleles.push(String(allele));
+      const rawAllele = row[2];
+      if (!rawAllele || rawAllele === "-") return;
+      const alleleText = String(rawAllele);
+      const homozygous = HOMOZYGOUS_SUFFIX_REGEX.test(alleleText);
+      const allele = alleleText.replace(HOMOZYGOUS_SUFFIX_REGEX, "");
+      patients[patients.length - 1].alleles.push({ allele, homozygous });
     });
     return patients;
   }
@@ -1242,41 +1271,184 @@
     { key: "mixed", label: "Mixed" },
   ];
 
-  // Builds both the top-level None/Risk/Protective/Mixed counts and, for
-  // the three categories that have one, a breakdown by the specific
-  // allele combination observed — only combinations that actually
-  // occurred are included, rather than every theoretically possible one.
+  // Builds the top-level None/Risk/Protective/Mixed counts, a breakdown by
+  // the specific allele combination observed for the three categories
+  // that have one (only combinations that actually occurred, not every
+  // theoretically possible one), and a deterministic lookup from each
+  // bucket back to the actual patient records in it — a simple array
+  // build-up during the same tally pass, not a separate search — so the
+  // patient-list click-through never has to recompute anything.
   function buildAnalyticsAggregates(rplPatients, controlPatients) {
     const counts = {};
-    ANALYTICS_CATEGORIES.forEach((c) => (counts[c.key] = { rpl: 0, control: 0 }));
+    const patientsByCategory = {};
+    ANALYTICS_CATEGORIES.forEach((c) => {
+      counts[c.key] = { rpl: 0, control: 0 };
+      patientsByCategory[c.key] = { rpl: [], control: [] };
+    });
     const subBreakdowns = { risk: {}, protective: {}, mixed: {} };
+    const patientsBySubKey = { risk: {}, protective: {}, mixed: {} };
 
     const tally = (patients, side) => {
       (patients || []).forEach((patient) => {
         const { category, subKey } = classifyPatient(patient.alleles);
         counts[category][side] += 1;
+        patientsByCategory[category][side].push(patient);
         if (subKey) {
           if (!subBreakdowns[category][subKey]) subBreakdowns[category][subKey] = { rpl: 0, control: 0 };
+          if (!patientsBySubKey[category][subKey]) patientsBySubKey[category][subKey] = { rpl: [], control: [] };
           subBreakdowns[category][subKey][side] += 1;
+          patientsBySubKey[category][subKey][side].push(patient);
         }
       });
     };
     tally(rplPatients, "rpl");
     tally(controlPatients, "control");
 
-    return { counts, subBreakdowns };
+    return { counts, subBreakdowns, patientsByCategory, patientsBySubKey };
+  }
+
+  // ---- Analytics: plain-language statistical summary ----
+
+  // Standard normal CDF via the Abramowitz–Stegun erf approximation (no
+  // stats library is loaded) — used for both the two-proportion z-test's
+  // p-value and its post-hoc power estimate below.
+  function normalCDF(z) {
+    const sign = z < 0 ? -1 : 1;
+    const x = Math.abs(z) / Math.SQRT2;
+    const t = 1 / (1 + 0.3275911 * x);
+    const y =
+      1 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t) * Math.exp(-x * x);
+    return 0.5 * (1 + sign * y);
+  }
+
+  const Z_ALPHA_TWO_TAILED = 1.959963985; // two-tailed critical value at alpha = 0.05
+
+  // Two-proportion z-test comparing carrier rate x1/n1 (RPL) against
+  // x2/n2 (Control), plus a post-hoc power estimate for detecting the
+  // observed effect size at alpha = 0.05 (two-tailed). Null fields mean
+  // there's nothing to compare (an empty group).
+  function twoProportionTest(x1, n1, x2, n2) {
+    if (!n1 || !n2) return { pValue: null, power: null };
+    const p1 = x1 / n1;
+    const p2 = x2 / n2;
+    const pooled = (x1 + x2) / (n1 + n2);
+    const seNull = Math.sqrt(pooled * (1 - pooled) * (1 / n1 + 1 / n2));
+    if (seNull === 0) return { pValue: 1, power: 0 };
+
+    const z = (p1 - p2) / seNull;
+    const pValue = 2 * (1 - normalCDF(Math.abs(z)));
+
+    const seAlt = Math.sqrt((p1 * (1 - p1)) / n1 + (p2 * (1 - p2)) / n2);
+    const effect = Math.abs(p1 - p2);
+    const power = seAlt > 0 ? normalCDF(effect / seAlt - (Z_ALPHA_TWO_TAILED * seNull) / seAlt) : 0;
+
+    return { pValue, power };
+  }
+
+  // Per-allele carrier-rate comparison across all 5 tracked alleles — a
+  // patient "carries" an allele if it appears anywhere in their list,
+  // homozygous or not (zygosity doesn't change whether they carry it).
+  function computeAlleleCarrierStats(rplPatients, controlPatients) {
+    const rplList = rplPatients || [];
+    const controlList = controlPatients || [];
+    const rplTotal = rplList.length;
+    const controlTotal = controlList.length;
+
+    return [...RISK_ALLELES, ...PROTECTIVE_ALLELES].map((allele) => {
+      const rplCarriers = rplList.filter((p) => p.alleles.some((a) => a.allele === allele)).length;
+      const controlCarriers = controlList.filter((p) => p.alleles.some((a) => a.allele === allele)).length;
+      const { pValue, power } = twoProportionTest(rplCarriers, rplTotal, controlCarriers, controlTotal);
+      return { allele, rplCarriers, rplTotal, controlCarriers, controlTotal, pValue, power };
+    });
+  }
+
+  // Everything generateSummary() needs, computed once from the same
+  // patient lists/aggregates the chart already has — no re-parsing.
+  function computeAnalyticsSummaryData(rplPatients, controlPatients, aggregates) {
+    const rplTotal = (rplPatients || []).length;
+    const controlTotal = (controlPatients || []).length;
+
+    const alleleStats = computeAlleleCarrierStats(rplPatients, controlPatients);
+
+    let categoryGap = null;
+    ANALYTICS_CATEGORIES.forEach((c) => {
+      const propRpl = rplTotal ? aggregates.counts[c.key].rpl / rplTotal : 0;
+      const propControl = controlTotal ? aggregates.counts[c.key].control / controlTotal : 0;
+      const gap = Math.abs(propRpl - propControl);
+      if (!categoryGap || gap > categoryGap.gap) categoryGap = { key: c.key, label: c.label, propRpl, propControl, gap };
+    });
+    if (categoryGap && categoryGap.gap === 0) categoryGap = null; // nothing worth reporting if every group matches exactly
+
+    let topMixedCombo = null;
+    Object.entries(aggregates.subBreakdowns.mixed || {}).forEach(([subKey, values]) => {
+      const total = values.rpl + values.control;
+      if (!topMixedCombo || total > topMixedCombo.count) topMixedCombo = { subKey, count: total };
+    });
+
+    const homozygousCount = [...(rplPatients || []), ...(controlPatients || [])].filter((p) =>
+      p.alleles.some((a) => a.homozygous)
+    ).length;
+
+    return { alleleStats, categoryGap, topMixedCombo, homozygousCount, rplTotal, controlTotal };
+  }
+
+  // Pure function: computed stats in, one plain-language paragraph out —
+  // no DOM access, so it's independently testable.
+  function generateSummary(data) {
+    const sentences = [];
+
+    const significant = data.alleleStats.filter((s) => s.pValue !== null && s.pValue < 0.05);
+    if (significant.length) {
+      const parts = significant.map((s) => `${s.allele} (p = ${s.pValue.toFixed(3)})`);
+      sentences.push(
+        `${significant.length === 1 ? "One allele shows" : `${significant.length} alleles show`} a statistically significant difference in carrier rate between RPL and Control (p < 0.05): ${parts.join(", ")}.`
+      );
+    } else {
+      sentences.push(
+        "No allele showed a statistically significant difference in carrier rate between RPL and Control (p < 0.05) with the current sample."
+      );
+    }
+
+    const underpowered = data.alleleStats.filter((s) => s.power !== null && s.power < 0.8);
+    if (underpowered.length) {
+      sentences.push(
+        `${underpowered.map((s) => s.allele).join(", ")} ${underpowered.length === 1 ? "is" : "are"} below 80% statistical power given the current sample size, so ${underpowered.length === 1 ? "that result" : "these results"} should be treated as preliminary.`
+      );
+    }
+
+    if (data.categoryGap) {
+      const g = data.categoryGap;
+      sentences.push(
+        `"${g.label}" shows the largest proportional gap between groups: ${(g.propRpl * 100).toFixed(1)}% of RPL patients vs. ${(g.propControl * 100).toFixed(1)}% of Control patients.`
+      );
+    }
+
+    if (data.topMixedCombo) {
+      sentences.push(
+        `Within the Mixed category, the most common specific combination is ${data.topMixedCombo.subKey} (${data.topMixedCombo.count} patient(s)).`
+      );
+    }
+
+    sentences.push(
+      data.homozygousCount > 0
+        ? `${data.homozygousCount} patient(s) carry a homozygous copy of a tracked allele (the same allele inherited from both parents).`
+        : "No patients carry a homozygous copy of a tracked allele."
+    );
+
+    return sentences.join(" ");
   }
 
   // ---- Analytics chart (plain SVG, no charting library) ----
 
   const ANALYTICS_COLORS = { rpl: "#D4537E", control: "#1D9E75" };
 
-  // entries: [{ key, label, rpl, control, clickable }]. Height scales
-  // proportionally to the largest value in THIS chart (main view and a
-  // drill-down each scale independently), with the count printed above
-  // each bar. A clickable entry gets an invisible full-column hit target
-  // over both its bars so clicking anywhere in that category triggers
-  // onBarClick, not just the bars themselves.
+  // entries: [{ key, label, rpl, control }]. Height scales proportionally
+  // to the largest value in THIS chart (main view and a drill-down each
+  // scale independently), with the count printed above each bar. Every
+  // entry gets an invisible full-column hit target over both its bars —
+  // when onBarClick is given, clicking anywhere in a category's column
+  // triggers it, not just the bars themselves; what that click actually
+  // does (drill down vs. show a patient list) is the caller's decision.
   function renderGroupedBarChart(entries, { onBarClick } = {}) {
     const svgNS = "http://www.w3.org/2000/svg";
     const barWidth = 34;
@@ -1318,7 +1490,7 @@
     entries.forEach((entry, i) => {
       const groupX = marginLeft + i * (groupWidth + groupGap);
       const group = document.createElementNS(svgNS, "g");
-      group.setAttribute("class", `analytics-bar-group${entry.clickable ? " analytics-bar-group--clickable" : ""}`);
+      group.setAttribute("class", `analytics-bar-group${onBarClick ? " analytics-bar-group--clickable" : ""}`);
 
       [
         { value: entry.rpl, x: groupX, color: ANALYTICS_COLORS.rpl },
@@ -1356,7 +1528,7 @@
         group.appendChild(lineLabel);
       });
 
-      if (entry.clickable && onBarClick) {
+      if (onBarClick) {
         const hit = document.createElementNS(svgNS, "rect");
         hit.setAttribute("x", groupX - groupGap / 2);
         hit.setAttribute("y", 0);
@@ -1389,14 +1561,120 @@
     return legend;
   }
 
+  // A small, dismissible panel (not a full-screen view) listing the exact
+  // patients behind a bar — a deterministic lookup against
+  // patientsByCategory/patientsBySubKey, no recomputation. patientsBySide:
+  // { rpl: [...patients], control: [...patients] }, each patient already
+  // shaped { name, age, alleles: [{ allele, homozygous }] } by
+  // parseExportedResultsSheet().
+  function renderAnalyticsPatientList(bucketLabel, patientsBySide) {
+    const panel = document.createElement("div");
+    panel.className = "analytics-patient-list-panel";
+
+    const header = document.createElement("div");
+    header.className = "analytics-patient-list-header";
+    const title = document.createElement("h4");
+    title.className = "analytics-patient-list-title";
+    title.textContent = `Patients — ${bucketLabel}`;
+    header.appendChild(title);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "analytics-panel-close";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.setAttribute("aria-label", "Close patient list");
+    closeBtn.addEventListener("click", () => panel.remove());
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+
+    const sides = [
+      { key: "rpl", label: "RPL", color: ANALYTICS_COLORS.rpl },
+      { key: "control", label: "Control", color: ANALYTICS_COLORS.control },
+    ];
+
+    let totalShown = 0;
+    sides.forEach(({ key, label, color }) => {
+      const patients = (patientsBySide && patientsBySide[key]) || [];
+      if (!patients.length) return;
+      totalShown += patients.length;
+
+      const sideHeading = document.createElement("p");
+      sideHeading.className = "analytics-patient-list-side-heading";
+      sideHeading.innerHTML = `<span class="analytics-legend-swatch" style="background:${color}"></span>${label} (${patients.length})`;
+      panel.appendChild(sideHeading);
+
+      const list = document.createElement("ul");
+      list.className = "analytics-patient-list";
+      patients.forEach((patient) => {
+        const item = document.createElement("li");
+        item.className = "analytics-patient-list-item";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "analytics-patient-list-name";
+        nameSpan.textContent = patient.age ? `${patient.name} (${patient.age})` : patient.name;
+        item.appendChild(nameSpan);
+
+        const alleleWrap = document.createElement("span");
+        alleleWrap.className = "analytics-patient-list-alleles";
+        if (!patient.alleles.length) {
+          alleleWrap.textContent = "No tracked alleles";
+        } else {
+          patient.alleles.forEach((a) => {
+            const tag = document.createElement("span");
+            tag.className = "analytics-allele-tag";
+            tag.textContent = a.allele;
+            if (a.homozygous) {
+              const homoBadge = document.createElement("span");
+              homoBadge.className = "homozygous-badge";
+              homoBadge.textContent = "×2";
+              homoBadge.title = "Homozygous — same allele inherited from both parents";
+              tag.appendChild(homoBadge);
+            }
+            alleleWrap.appendChild(tag);
+          });
+        }
+        item.appendChild(alleleWrap);
+
+        list.appendChild(item);
+      });
+      panel.appendChild(list);
+    });
+
+    if (!totalShown) {
+      const empty = document.createElement("p");
+      empty.className = "analytics-patient-list-empty";
+      empty.textContent = "No patients in this category.";
+      panel.appendChild(empty);
+    }
+
+    return panel;
+  }
+
   // container: the always-present chart area — swaps its content between
   // the main 4-category view and a category's drill-down view (with a
   // Back button), rather than showing both/needing a second container.
-  function renderAnalyticsChart(container, aggregates) {
+  // summaryText: the generateSummary() paragraph, precomputed once by the
+  // caller — only shown on the main view (it's a whole-dataset summary,
+  // not scoped to whichever category you've drilled into).
+  function renderAnalyticsChart(container, aggregates, summaryText) {
     container.hidden = false;
+    let patientListPanel = null;
+
+    function closePatientList() {
+      if (patientListPanel) {
+        patientListPanel.remove();
+        patientListPanel = null;
+      }
+    }
+
+    function showPatientList(label, patientsBySide) {
+      closePatientList();
+      patientListPanel = renderAnalyticsPatientList(label, patientsBySide);
+      container.appendChild(patientListPanel);
+    }
 
     function renderMain() {
       container.innerHTML = "";
+      patientListPanel = null;
       container.appendChild(renderAnalyticsLegend());
 
       const entries = ANALYTICS_CATEGORIES.map((c) => ({
@@ -1404,14 +1682,66 @@
         label: c.label,
         rpl: aggregates.counts[c.key].rpl,
         control: aggregates.counts[c.key].control,
-        clickable: c.key !== "none" && Object.keys(aggregates.subBreakdowns[c.key] || {}).length > 0,
       }));
 
-      container.appendChild(renderGroupedBarChart(entries, { onBarClick: renderDrilldown }));
+      container.appendChild(
+        renderGroupedBarChart(entries, {
+          onBarClick: (categoryKey) => {
+            const hasSubBreakdown = Object.keys(aggregates.subBreakdowns[categoryKey] || {}).length > 0;
+            if (hasSubBreakdown) {
+              renderDrilldown(categoryKey);
+            } else {
+              const label = ANALYTICS_CATEGORIES.find((c) => c.key === categoryKey).label;
+              showPatientList(label, aggregates.patientsByCategory[categoryKey]);
+            }
+          },
+        })
+      );
+
+      if (summaryText) {
+        const summaryRow = document.createElement("div");
+        summaryRow.className = "analytics-summary-row";
+        const summaryBtn = document.createElement("button");
+        summaryBtn.type = "button";
+        summaryBtn.className = "analytics-summary-btn";
+        summaryBtn.textContent = "View Summary";
+        summaryBtn.addEventListener("click", () => {
+          closePatientList();
+          const existing = container.querySelector(".analytics-summary-panel");
+          if (existing) existing.remove();
+
+          const panel = document.createElement("div");
+          panel.className = "analytics-summary-panel";
+          const panelHeader = document.createElement("div");
+          panelHeader.className = "analytics-summary-panel-header";
+          const panelTitle = document.createElement("h4");
+          panelTitle.className = "analytics-summary-panel-title";
+          panelTitle.textContent = "Summary";
+          panelHeader.appendChild(panelTitle);
+          const closeBtn = document.createElement("button");
+          closeBtn.type = "button";
+          closeBtn.className = "analytics-panel-close";
+          closeBtn.innerHTML = "&times;";
+          closeBtn.setAttribute("aria-label", "Close summary");
+          closeBtn.addEventListener("click", () => panel.remove());
+          panelHeader.appendChild(closeBtn);
+          panel.appendChild(panelHeader);
+
+          const text = document.createElement("p");
+          text.className = "analytics-summary-text";
+          text.textContent = summaryText;
+          panel.appendChild(text);
+
+          container.appendChild(panel);
+        });
+        summaryRow.appendChild(summaryBtn);
+        container.appendChild(summaryRow);
+      }
     }
 
     function renderDrilldown(categoryKey) {
       container.innerHTML = "";
+      patientListPanel = null;
 
       const backBtn = document.createElement("button");
       backBtn.type = "button";
@@ -1429,10 +1759,16 @@
       container.appendChild(renderAnalyticsLegend());
 
       const subEntries = Object.entries(aggregates.subBreakdowns[categoryKey] || {})
-        .map(([subKey, values]) => ({ key: subKey, label: subKey, rpl: values.rpl, control: values.control, clickable: false }))
+        .map(([subKey, values]) => ({ key: subKey, label: subKey, rpl: values.rpl, control: values.control }))
         .sort((a, b) => b.rpl + b.control - (a.rpl + a.control));
 
-      container.appendChild(renderGroupedBarChart(subEntries, {}));
+      container.appendChild(
+        renderGroupedBarChart(subEntries, {
+          onBarClick: (subKey) => {
+            showPatientList(`${categoryLabel} — ${subKey}`, aggregates.patientsBySubKey[categoryKey][subKey]);
+          },
+        })
+      );
     }
 
     renderMain();
@@ -1555,7 +1891,9 @@
     document.getElementById("analytics-control-input-container").appendChild(controlCard);
 
     viewBtn.addEventListener("click", () => {
-      renderAnalyticsChart(chartContainer, buildAnalyticsAggregates(analyticsData.rpl, analyticsData.control));
+      const aggregates = buildAnalyticsAggregates(analyticsData.rpl, analyticsData.control);
+      const summaryData = computeAnalyticsSummaryData(analyticsData.rpl, analyticsData.control, aggregates);
+      renderAnalyticsChart(chartContainer, aggregates, generateSummary(summaryData));
     });
 
     analyticsAreaRendered = true;
