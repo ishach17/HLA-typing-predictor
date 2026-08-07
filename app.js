@@ -1475,6 +1475,14 @@
 
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    // Explicit width/height (not just viewBox) give the SVG a real
+    // intrinsic size to shrink from — without these, CSS width:auto falls
+    // back to the browser's generic 300x150 default. A chart with fewer
+    // bars (e.g. a "Risk only" drilldown with just 1-2 combinations) then
+    // renders at its own natural, smaller size instead of being stretched
+    // to match a chart with more bars, which used to inflate its height.
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
     svg.setAttribute("class", "analytics-chart-svg");
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", "Bar chart of patient counts by category, RPL vs Control");
