@@ -1586,65 +1586,75 @@
     header.appendChild(closeBtn);
     panel.appendChild(header);
 
+    // RPL and Control side by side, one column each — always both, even
+    // when one side has nothing, so the layout stays side-by-side rather
+    // than collapsing to a single column depending on the data.
+    const columns = document.createElement("div");
+    columns.className = "analytics-patient-list-columns";
+
     const sides = [
       { key: "rpl", label: "RPL", color: ANALYTICS_COLORS.rpl },
       { key: "control", label: "Control", color: ANALYTICS_COLORS.control },
     ];
 
-    let totalShown = 0;
     sides.forEach(({ key, label, color }) => {
       const patients = (patientsBySide && patientsBySide[key]) || [];
-      if (!patients.length) return;
-      totalShown += patients.length;
+
+      const column = document.createElement("div");
+      column.className = "analytics-patient-list-column";
 
       const sideHeading = document.createElement("p");
       sideHeading.className = "analytics-patient-list-side-heading";
       sideHeading.innerHTML = `<span class="analytics-legend-swatch" style="background:${color}"></span>${label} (${patients.length})`;
-      panel.appendChild(sideHeading);
+      column.appendChild(sideHeading);
 
-      const list = document.createElement("ul");
-      list.className = "analytics-patient-list";
-      patients.forEach((patient) => {
-        const item = document.createElement("li");
-        item.className = "analytics-patient-list-item";
+      if (!patients.length) {
+        const empty = document.createElement("p");
+        empty.className = "analytics-patient-list-empty";
+        empty.textContent = "No patients.";
+        column.appendChild(empty);
+      } else {
+        const list = document.createElement("ul");
+        list.className = "analytics-patient-list";
+        patients.forEach((patient) => {
+          const item = document.createElement("li");
+          item.className = "analytics-patient-list-item";
 
-        const nameSpan = document.createElement("span");
-        nameSpan.className = "analytics-patient-list-name";
-        nameSpan.textContent = patient.age ? `${patient.name} (${patient.age})` : patient.name;
-        item.appendChild(nameSpan);
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "analytics-patient-list-name";
+          nameSpan.textContent = patient.age ? `${patient.name} (${patient.age})` : patient.name;
+          item.appendChild(nameSpan);
 
-        const alleleWrap = document.createElement("span");
-        alleleWrap.className = "analytics-patient-list-alleles";
-        if (!patient.alleles.length) {
-          alleleWrap.textContent = "No tracked alleles";
-        } else {
-          patient.alleles.forEach((a) => {
-            const tag = document.createElement("span");
-            tag.className = "analytics-allele-tag";
-            tag.textContent = a.allele;
-            if (a.homozygous) {
-              const homoBadge = document.createElement("span");
-              homoBadge.className = "homozygous-badge";
-              homoBadge.textContent = "×2";
-              homoBadge.title = "Homozygous — same allele inherited from both parents";
-              tag.appendChild(homoBadge);
-            }
-            alleleWrap.appendChild(tag);
-          });
-        }
-        item.appendChild(alleleWrap);
+          const alleleWrap = document.createElement("span");
+          alleleWrap.className = "analytics-patient-list-alleles";
+          if (!patient.alleles.length) {
+            alleleWrap.textContent = "No tracked alleles";
+          } else {
+            patient.alleles.forEach((a) => {
+              const tag = document.createElement("span");
+              tag.className = "analytics-allele-tag";
+              tag.textContent = a.allele;
+              if (a.homozygous) {
+                const homoBadge = document.createElement("span");
+                homoBadge.className = "homozygous-badge";
+                homoBadge.textContent = "×2";
+                homoBadge.title = "Homozygous — same allele inherited from both parents";
+                tag.appendChild(homoBadge);
+              }
+              alleleWrap.appendChild(tag);
+            });
+          }
+          item.appendChild(alleleWrap);
 
-        list.appendChild(item);
-      });
-      panel.appendChild(list);
+          list.appendChild(item);
+        });
+        column.appendChild(list);
+      }
+
+      columns.appendChild(column);
     });
 
-    if (!totalShown) {
-      const empty = document.createElement("p");
-      empty.className = "analytics-patient-list-empty";
-      empty.textContent = "No patients in this category.";
-      panel.appendChild(empty);
-    }
+    panel.appendChild(columns);
 
     return panel;
   }

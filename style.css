@@ -629,6 +629,16 @@ body {
   color: var(--text-primary);
 }
 
+.analytics-patient-list-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.analytics-patient-list-column {
+  min-width: 0;
+}
+
 .analytics-patient-list-side-heading {
   display: flex;
   align-items: center;
@@ -1323,7 +1333,8 @@ body {
   }
 
   .section-grid,
-  .analytics-upload-row {
+  .analytics-upload-row,
+  .analytics-patient-list-columns {
     grid-template-columns: 1fr;
   }
 }
