@@ -177,6 +177,16 @@ body {
   display: none;
 }
 
+/* Home page only — decorative DNA-helix backdrop, fading to white on the
+   left so the heading/cards stay fully readable. Purely visual; doesn't
+   touch layout, spacing, or any functionality. */
+#view-home {
+  position: relative;
+  margin: -32px;
+  padding: 32px;
+  background: url("hla-main-page-background.png") no-repeat right top / cover;
+}
+
 .content-hero-title {
   margin: 0 0 24px;
   font-family: var(--font-display);
@@ -1739,6 +1749,11 @@ body {
 /* Responsive down to tablet width */
 @media (max-width: 768px) {
   .app-content {
+    padding: 20px 16px;
+  }
+
+  #view-home {
+    margin: -20px -16px;
     padding: 20px 16px;
   }
 
