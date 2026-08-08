@@ -11,29 +11,42 @@
   // ---- Icons (single-color line art, matches extractor tool empty states) ----
 
   const ICONS = {
-    single: `
+    // Dedicated brand mark for the sidebar/topbar logo — a two-tone ring,
+    // kept separate from the section icons below so it reads as a logo
+    // rather than a reused nav icon. Purely decorative, fixed colors (not
+    // currentColor), no text.
+    logo: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="16" fill="none" stroke="#5eead4" stroke-width="5" stroke-linecap="round" stroke-dasharray="70 100.5" transform="rotate(-90 24 24)"></circle>
+        <circle cx="24" cy="24" r="16" fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="5" stroke-linecap="round" stroke-dasharray="22 100.5" stroke-dashoffset="-72" transform="rotate(-90 24 24)"></circle>
+      </svg>
+    `,
+    // DNA double-helix — sidebar's "Single Analysis" nav icon, and RPL's icon.
+    dna: `
       <svg viewBox="0 0 48 48" aria-hidden="true">
         <path d="M16 6c0 7 16 7 16 14s-16 7-16 14"></path>
         <path d="M32 6c0 7-16 7-16 14s16 7 16 14"></path>
         <path d="M18 13h12M18 27h12"></path>
       </svg>
     `,
-    couple: `
+    // Two overlapping people — "Couple Analysis".
+    users: `
       <svg viewBox="0 0 48 48" aria-hidden="true">
-        <path d="M6 8c0 6 12 6 12 12s-12 6-12 12"></path>
-        <path d="M18 8c0 6-12 6-12 12s12 6 12 12"></path>
-        <path d="M30 8c0 6 12 6 12 12s-12 6-12 12"></path>
-        <path d="M42 8c0 6-12 6-12 12s12 6 12 12"></path>
-        <path d="M18 20h12"></path>
+        <circle cx="18" cy="16" r="6"></circle>
+        <path d="M8 40v-3a8 8 0 0 1 8-8h4a8 8 0 0 1 8 8v3"></path>
+        <path d="M29 9a6 6 0 0 1 0 11.6"></path>
+        <path d="M31 40v-3a8 8 0 0 0-3-6.2"></path>
       </svg>
     `,
-    kir: `
+    // Circle with a center dot — "KIR Analysis" nav icon, and the badge icon
+    // used on both the Single and KIR home cards.
+    circleDot: `
       <svg viewBox="0 0 48 48" aria-hidden="true">
-        <circle cx="24" cy="30" r="12"></circle>
-        <path d="M24 18V8M24 8l-5 5M24 8l5 5"></path>
-        <circle cx="24" cy="30" r="3"></circle>
+        <circle cx="24" cy="24" r="19"></circle>
+        <circle cx="24" cy="24" r="2.5" fill="currentColor" stroke="none"></circle>
       </svg>
     `,
+    // Flask — "Non RPL Control".
     control: `
       <svg viewBox="0 0 48 48" aria-hidden="true">
         <path d="M18 6h12"></path>
@@ -41,12 +54,50 @@
         <path d="M16 32h16"></path>
       </svg>
     `,
+    // Bar chart — "Analytics".
     analytics: `
       <svg viewBox="0 0 48 48" aria-hidden="true">
         <path d="M8 40V20"></path>
         <path d="M20 40V10"></path>
         <path d="M32 40V26"></path>
         <path d="M6 40h36"></path>
+      </svg>
+    `,
+    // Hourglass — disabled "In Development" buttons.
+    hourglass: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M14 6h20M14 42h20"></path>
+        <path d="M16 6v6c0 5 4 8 8 8s8-3 8-8V6"></path>
+        <path d="M16 42v-6c0-5 4-8 8-8s8 3 8 8v6"></path>
+      </svg>
+    `,
+    // Shield with a checkmark — results-panel header icon.
+    shieldCheck: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M24 5 8 11v11c0 11 7 18 16 21 9-3 16-10 16-21V11z"></path>
+        <path d="M17 24l5 5 9-10"></path>
+      </svg>
+    `,
+    // Downward arrow into a tray — "Export All" button icon.
+    download: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M24 6v24M24 30l-8-8M24 30l8-8"></path>
+        <path d="M10 34v4a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-4"></path>
+      </svg>
+    `,
+    // Magnifying glass — results filter search input.
+    search: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="21" cy="21" r="13"></circle>
+        <path d="M30.5 30.5 42 42"></path>
+      </svg>
+    `,
+    // Warning triangle — "High Risk" filter chip.
+    warning: `
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M24 6 4 41h40z"></path>
+        <path d="M24 20v9"></path>
+        <circle cx="24" cy="33" r="1.2" fill="currentColor" stroke="none"></circle>
       </svg>
     `,
   };
@@ -60,31 +111,37 @@
   const SECTIONS = [
     {
       key: "single",
-      icon: ICONS.single,
+      icon: ICONS.dna,
+      badgeIcon: ICONS.circleDot,
       heading: "Single Analysis",
       description: "Upload RPL and Control reports for individual HLA analysis.",
       ctaLabel: "Get Started",
       onClick: goToSinglePage,
+      banner: true,
     },
     {
       key: "couple",
-      icon: ICONS.couple,
+      icon: ICONS.users,
+      badgeIcon: ICONS.users,
       heading: "Couple Analysis",
       description: "Compare HLA allele patterns between two individuals and their studied associations.",
       ctaLabel: "In Development",
+      banner: true,
     },
     {
       key: "kir",
-      icon: ICONS.kir,
+      icon: ICONS.circleDot,
+      badgeIcon: ICONS.circleDot,
       heading: "KIR Analysis",
       description: "Analyze KIR gene patterns and their studied associations with HLA ligands.",
       ctaLabel: "In Development",
+      banner: true,
     },
   ];
 
-  function renderSectionCard({ key, icon, heading, description, ctaLabel, onClick }) {
+  function renderSectionCard({ key, icon, badgeIcon, heading, description, ctaLabel, onClick, banner, step, hint }) {
     const card = document.createElement("div");
-    card.className = `section-card section-card--${key}${onClick ? " section-card--clickable" : ""}`;
+    card.className = `section-card section-card--${key}${onClick ? " section-card--clickable" : ""}${banner ? " section-card--banner" : ""}`;
     if (onClick) {
       card.setAttribute("role", "button");
       card.tabIndex = 0;
@@ -92,17 +149,46 @@
 
     const tagHtml = onClick ? "" : `<span class="section-card-tag">Coming Soon</span>`;
     const ctaDisabledAttr = onClick ? "" : " disabled";
-    const ctaArrow = onClick ? ` <span aria-hidden="true">&rarr;</span>` : "";
+    const ctaArrow = onClick ? ` <span class="section-card-cta-arrow" aria-hidden="true">&rarr;</span>` : "";
+    const ctaHourglass = onClick ? "" : `<span class="section-card-cta-icon">${ICONS.hourglass}</span>`;
     const descriptionHtml = description ? `<p class="section-card-description">${description}</p>` : "";
+    const hintHtml = hint ? `<p class="section-card-hint">${hint}</p>` : "";
+    const stepHtml = step ? `<span class="section-card-step">${step}</span>` : "";
+
+    // Banner cards (home page): a top accent rule spanning the full card
+    // width, an inset "art" tile standing in for the illustration, and a
+    // round icon badge. Non-banner cards (Single Analysis sub-cards): a
+    // short accent tick in the top-right corner instead, and a square icon
+    // box paired with the stage label on the same row.
+    const topRuleHtml = banner
+      ? `<span class="section-card-top-rule"></span>`
+      : `<span class="section-card-corner-rule"></span>`;
+
+    const iconBlockHtml = banner
+      ? `
+        <div class="section-card-art">
+          <div class="section-card-art-icon">${icon}</div>
+        </div>
+        <span class="section-card-icon-circle">${badgeIcon}</span>
+      `
+      : `
+        <div class="section-card-icon-row">
+          <span class="section-card-icon-box">${icon}</span>
+          ${stepHtml}
+        </div>
+      `;
 
     card.innerHTML = `
+      ${topRuleHtml}
       ${tagHtml}
-      <div class="section-card-icon-circle">
-        <div class="section-card-icon">${icon}</div>
+      <div class="section-card-body">
+        ${iconBlockHtml}
+        <h2 class="section-card-heading">${heading}</h2>
+        ${descriptionHtml}
+        ${hintHtml}
+        <div class="section-card-spacer"></div>
+        <button type="button" class="section-card-cta" tabindex="-1"${ctaDisabledAttr}>${ctaHourglass}${ctaLabel}${ctaArrow}</button>
       </div>
-      <h2 class="section-card-heading">${heading}</h2>
-      ${descriptionHtml}
-      <button type="button" class="section-card-cta" tabindex="-1"${ctaDisabledAttr}>${ctaLabel}${ctaArrow}</button>
     `;
 
     if (onClick) {
@@ -120,7 +206,12 @@
 
   function renderSectionGrid() {
     const grid = document.getElementById("section-grid");
-    SECTIONS.forEach((section) => grid.appendChild(renderSectionCard(section)));
+    SECTIONS.forEach((section, i) => {
+      const card = renderSectionCard(section);
+      card.classList.add("rise");
+      card.style.animationDelay = `${i * 70}ms`;
+      grid.appendChild(card);
+    });
   }
 
   // ---- Single Analysis sub-selection grid: RPL / Non RPL Control / ----
@@ -131,8 +222,10 @@
   const SINGLE_SUBSECTIONS = [
     {
       key: "rpl",
-      icon: ICONS.single,
+      icon: ICONS.dna,
       heading: "RPL",
+      step: "Stage 01",
+      hint: "Recipient paired ligand report",
       ctaLabel: "Get Started",
       onClick: goToRplPage,
     },
@@ -140,6 +233,8 @@
       key: "control",
       icon: ICONS.control,
       heading: "Non RPL Control",
+      step: "Stage 02",
+      hint: "Matched control report",
       ctaLabel: "Get Started",
       onClick: goToControlPage,
     },
@@ -147,6 +242,8 @@
       key: "analytics",
       icon: ICONS.analytics,
       heading: "Analytics",
+      step: "Stage 03",
+      hint: "Resolved allele analytics",
       ctaLabel: "Get Started",
       onClick: goToAnalyticsPage,
     },
@@ -157,33 +254,20 @@
   function renderSingleSubsectionGrid() {
     if (singleSubsectionsRendered) return;
     const grid = document.getElementById("single-subsection-grid");
-    SINGLE_SUBSECTIONS.forEach((section) => grid.appendChild(renderSectionCard(section)));
+    SINGLE_SUBSECTIONS.forEach((section, i) => {
+      const card = renderSectionCard(section);
+      card.classList.add("rise");
+      card.style.animationDelay = `${i * 70}ms`;
+      grid.appendChild(card);
+    });
     singleSubsectionsRendered = true;
   }
 
-  // ---- Sidebar navigation ----
-  // Mirrors SECTIONS: Single is the only real, clickable destination; Couple
-  // and KIR are shown but disabled, matching their "Coming Soon" card state
-  // instead of pretending they lead somewhere.
+  // ---- Topbar brand logo (persistent, no side panel) ----
 
-  function renderSidebarNav() {
-    const nav = document.getElementById("sidebar-nav");
-    SECTIONS.forEach((section) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = `sidebar-nav-item${section.onClick ? " is-active" : ""}`;
-      item.innerHTML = `<span class="sidebar-nav-icon">${section.icon}</span><span>${section.heading}</span>`;
-      if (section.onClick) {
-        item.addEventListener("click", section.onClick);
-      } else {
-        item.disabled = true;
-      }
-      nav.appendChild(item);
-    });
-  }
-
-  function renderSidebarLogo() {
-    document.getElementById("sidebar-logo").innerHTML = ICONS.single;
+  function renderTopbarLogo() {
+    const topbarLogo = document.getElementById("topbar-logo");
+    if (topbarLogo) topbarLogo.innerHTML = ICONS.logo;
   }
 
   // ---- Single page: PDF upload + real extraction (ported from the HLA
@@ -882,6 +966,12 @@
     return "";
   }
 
+  function classificationIcon(classification) {
+    if (classification === "high_risk") return `<span class="classification-badge-icon">${ICONS.warning}</span>`;
+    if (classification === "protective") return `<span class="classification-badge-icon">${ICONS.shieldCheck}</span>`;
+    return "";
+  }
+
   // Rebuilds the raw { "A/1": "...", ... } alleles object from a rendered
   // person's flattened values/fieldKeys — reads processRplPdfFile()'s
   // output shape without needing to change that function.
@@ -965,6 +1055,7 @@
     ["Patient Name", "Age", "Allele", "Classification", "Reference Frequency"].forEach((c) => {
       const th = document.createElement("th");
       th.textContent = c;
+      if (c === "Reference Frequency") th.className = "frequency-cell";
       headRow.appendChild(th);
     });
     thead.appendChild(headRow);
@@ -972,12 +1063,36 @@
 
     const tbody = document.createElement("tbody");
     patients.forEach((patient) => {
-      const nameLabel = patient.name || patient.sampleNumber || "—";
+      // Sample number rides along in parentheses when there's a real name
+      // to attach it to — otherwise it's the only identifier available and
+      // stands in for the name outright, same as before.
+      const nameLabel =
+        patient.name && patient.sampleNumber
+          ? `${patient.name} (${patient.sampleNumber})`
+          : patient.name || patient.sampleNumber || "—";
       const ageLabel = patient.age || "—";
       const matches = compareToReference(patient.alleles, RPL_REFERENCE_DATA);
 
+      // The filter bar (search + High Risk/Protective chips) reads these
+      // data attributes rather than re-deriving them, and applies them at
+      // the whole-patient level so a match never splits a patient's rows
+      // apart from the row carrying their name.
+      const searchText = [patient.name, patient.sampleNumber, ...matches.map((m) => m.allele)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const hasHighRisk = matches.some((m) => m.classification === "high_risk");
+      const hasProtective = matches.some((m) => m.classification === "protective");
+
+      function tagFilterAttrs(tr) {
+        tr.dataset.search = searchText;
+        if (hasHighRisk) tr.dataset.hasHighRisk = "1";
+        if (hasProtective) tr.dataset.hasProtective = "1";
+      }
+
       if (!matches.length) {
         const tr = document.createElement("tr");
+        tagFilterAttrs(tr);
         const nameTd = document.createElement("td");
         nameTd.textContent = nameLabel;
         tr.appendChild(nameTd);
@@ -995,6 +1110,7 @@
 
       matches.forEach((match, matchIdx) => {
         const tr = document.createElement("tr");
+        tagFilterAttrs(tr);
 
         const nameTd = document.createElement("td");
         nameTd.textContent = matchIdx === 0 ? nameLabel : "";
@@ -1019,11 +1135,12 @@
         const classTd = document.createElement("td");
         const badge = document.createElement("span");
         badge.className = `classification-badge ${classificationBadgeClass(match.classification)}`;
-        badge.textContent = classificationLabel(match.classification);
+        badge.innerHTML = `${classificationIcon(match.classification)}${classificationLabel(match.classification)}`;
         classTd.appendChild(badge);
         tr.appendChild(classTd);
 
         const freqTd = document.createElement("td");
+        freqTd.className = "frequency-cell";
         freqTd.textContent = `${(match.referenceFrequency * 100).toFixed(2)}%`;
         tr.appendChild(freqTd);
 
@@ -1034,6 +1151,54 @@
     tableWrap.appendChild(table);
 
     return tableWrap;
+  }
+
+  // Search box (name/allele substring) + High Risk/Protective toggle chips
+  // sitting above a just-rendered renderResultsTable() — filters whole
+  // patient row-groups at once using the data attributes that function
+  // stamped onto each <tr>, so a patient's rows never get split apart.
+  function renderResultsFilterBar(tableWrap) {
+    const bar = document.createElement("div");
+    bar.className = "results-filter-bar";
+    bar.innerHTML = `
+      <div class="results-search">
+        <span class="results-search-icon">${ICONS.search}</span>
+        <input type="text" class="results-search-input" placeholder="Filter by name or allele..." />
+      </div>
+      <div class="results-filter-chips">
+        <button type="button" class="results-filter-chip results-filter-chip--risk" data-filter="hasHighRisk">
+          <span class="results-filter-chip-icon">${ICONS.warning}</span>High Risk
+        </button>
+        <button type="button" class="results-filter-chip results-filter-chip--protective" data-filter="hasProtective">
+          <span class="results-filter-chip-icon">${ICONS.shieldCheck}</span>Protective
+        </button>
+      </div>
+    `;
+
+    const searchInput = bar.querySelector(".results-search-input");
+    const chips = Array.from(bar.querySelectorAll(".results-filter-chip"));
+    let activeFilter = null;
+
+    function applyFilters() {
+      const term = searchInput.value.trim().toLowerCase();
+      tableWrap.querySelectorAll("tbody tr").forEach((tr) => {
+        const matchesSearch = !term || (tr.dataset.search || "").includes(term);
+        const matchesChip = !activeFilter || tr.dataset[activeFilter] === "1";
+        tr.hidden = !(matchesSearch && matchesChip);
+      });
+    }
+
+    searchInput.addEventListener("input", applyFilters);
+    chips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const filter = chip.dataset.filter;
+        activeFilter = activeFilter === filter ? null : filter;
+        chips.forEach((c) => c.classList.toggle("is-active", c === chip && Boolean(activeFilter)));
+        applyFilters();
+      });
+    });
+
+    return bar;
   }
 
   // For cards with no reference dataset to compare against (Control
@@ -1159,7 +1324,7 @@
     const toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
     toggleBtn.className = "export-results-btn export-menu-toggle";
-    toggleBtn.innerHTML = `Export All <span aria-hidden="true">&#9662;</span>`;
+    toggleBtn.innerHTML = `<span class="export-results-btn-icon">${ICONS.download}</span>Export All <span aria-hidden="true">&#9662;</span>`;
     wrap.appendChild(toggleBtn);
 
     const menu = document.createElement("div");
@@ -1803,14 +1968,11 @@
   // just reads an already-exported results sheet back in, once, with no
   // reference comparison or multi-report accumulation to manage) ----
 
-  function createAnalyticsUploadCard({ label, onLoaded }) {
+  function createAnalyticsUploadCard({ label, icon, onLoaded }) {
     const card = document.createElement("div");
     card.className = "upload-card input-panel";
 
-    const title = document.createElement("h3");
-    title.className = "upload-card-title";
-    title.textContent = label;
-    card.appendChild(title);
+    card.appendChild(buildUploadCardHeader(icon, label));
 
     const dropzone = document.createElement("div");
     dropzone.className = "dropzone";
@@ -1899,6 +2061,7 @@
 
     const rplCard = createAnalyticsUploadCard({
       label: "Add RPL Results Sheet",
+      icon: ICONS.dna,
       onLoaded: (patients) => {
         analyticsData.rpl = patients;
         updateViewBtnState();
@@ -1906,6 +2069,7 @@
     });
     const controlCard = createAnalyticsUploadCard({
       label: "Add Control Results Sheet",
+      icon: ICONS.control,
       onLoaded: (patients) => {
         analyticsData.control = patients;
         updateViewBtnState();
@@ -1933,10 +2097,23 @@
     </svg>
   `;
 
+  // Shared header row (icon box + title) for both upload-card builders below —
+  // purely a markup/visual helper, doesn't touch any parsing/export logic.
+  function buildUploadCardHeader(icon, label) {
+    const header = document.createElement("div");
+    header.className = "upload-card-header";
+    header.innerHTML = `
+      ${icon ? `<span class="upload-card-icon">${icon}</span>` : ""}
+      <h3 class="upload-card-title">${label}</h3>
+    `;
+    return header;
+  }
+
   const EXCEL_ROW_LIMIT = 25;
 
   function createUploadCard({
     label,
+    icon,
     columns,
     parseFile,
     compareReferencePdf,
@@ -1949,10 +2126,7 @@
     const inputPanel = document.createElement("div");
     inputPanel.className = "upload-card input-panel";
 
-    const title = document.createElement("h3");
-    title.className = "upload-card-title";
-    title.textContent = label;
-    inputPanel.appendChild(title);
+    inputPanel.appendChild(buildUploadCardHeader(icon, label));
 
     const dropzone = document.createElement("div");
     dropzone.className = "dropzone";
@@ -1984,6 +2158,9 @@
 
     const resultsHeader = document.createElement("div");
     resultsHeader.className = "results-panel-header";
+    const resultsHeaderIcon = document.createElement("span");
+    resultsHeaderIcon.className = "results-panel-icon";
+    resultsHeaderIcon.innerHTML = ICONS.shieldCheck;
     const resultsHeaderLeft = document.createElement("div");
     resultsHeaderLeft.className = "results-panel-heading";
     const resultsTitle = document.createElement("h3");
@@ -1993,6 +2170,10 @@
     resultsSubtitle.className = "results-panel-subtitle";
     resultsHeaderLeft.appendChild(resultsTitle);
     resultsHeaderLeft.appendChild(resultsSubtitle);
+    const resultsHeaderLeftGroup = document.createElement("div");
+    resultsHeaderLeftGroup.className = "results-panel-heading-group";
+    resultsHeaderLeftGroup.appendChild(resultsHeaderIcon);
+    resultsHeaderLeftGroup.appendChild(resultsHeaderLeft);
     const resultsHeaderActions = document.createElement("div");
     resultsHeaderActions.className = "results-panel-actions";
     const resultsHeaderRight = document.createElement("div");
@@ -2010,7 +2191,7 @@
     resultsCloseBtn.title = "Close results preview";
     resultsCloseBtn.addEventListener("click", () => goToUploadStep());
     resultsHeaderRight.appendChild(resultsCloseBtn);
-    resultsHeader.appendChild(resultsHeaderLeft);
+    resultsHeader.appendChild(resultsHeaderLeftGroup);
     resultsHeader.appendChild(resultsHeaderRight);
     resultsPanel.appendChild(resultsHeader);
 
@@ -2183,7 +2364,9 @@
       });
 
       if (compareReferencePdf && patients.length) {
-        previewWrap.appendChild(renderResultsTable(patients));
+        const table = renderResultsTable(patients);
+        previewWrap.appendChild(renderResultsFilterBar(table));
+        previewWrap.appendChild(table);
         resultsHeaderActions.appendChild(renderExportMenu(patients, resultsFileName));
       } else if (!compareReferencePdf && extractionRows.length) {
         previewWrap.appendChild(renderExtractionTable(columns, extractionRows));
@@ -2230,7 +2413,9 @@
           sampleNumber: sampleNumberFromExcelRow(excelSheet.headers, row),
           alleles: allelesFromExcelRow(excelSheet.headers, row),
         }));
-        previewWrap.appendChild(renderResultsTable(patients));
+        const table = renderResultsTable(patients);
+        previewWrap.appendChild(renderResultsFilterBar(table));
+        previewWrap.appendChild(table);
         resultsSubtitle.textContent = `${totalRows} patient(s) processed`;
 
         const allPatients = excelSheet.rows.map((row) => ({
@@ -2402,6 +2587,7 @@
     const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files-rpl");
     const rplCard = createUploadCard({
       label: "Add RPL Report",
+      icon: ICONS.dna,
       columns: RPL_COLUMNS,
       parseFile: processRplPdfFile,
       compareReferencePdf: true,
@@ -2428,6 +2614,7 @@
     const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files-control");
     const controlCard = createUploadCard({
       label: "Add Control Report",
+      icon: ICONS.control,
       columns: CONTROL_COLUMNS,
       parseFile: processControlPdfFile,
       compareReferencePdf: false,
@@ -2452,6 +2639,11 @@
   const viewControl = document.getElementById("view-control");
   const viewAnalytics = document.getElementById("view-analytics");
   const topbarPageTitle = document.getElementById("topbar-page-title");
+  const topbarInstrument = document.getElementById("topbar-instrument");
+  const topbarSep = document.getElementById("topbar-sep");
+  const topbarOverviewBtn = document.getElementById("topbar-overview-btn");
+
+  if (topbarOverviewBtn) topbarOverviewBtn.addEventListener("click", () => goToHomeView());
 
   const ALL_VIEWS = [viewHome, viewSingle, viewRpl, viewControl, viewAnalytics];
 
@@ -2468,6 +2660,14 @@
       candidate.hidden = candidate !== view;
     });
     topbarPageTitle.textContent = PAGE_TITLES[view.id] || "";
+
+    // No side panel — the brand mark stays put in the topbar on every page.
+    // Only the "Instrument / <page>" breadcrumb and the Overview button
+    // (back to the home overview) are specific to non-home pages.
+    const isHome = view === viewHome;
+    [topbarInstrument, topbarSep, topbarOverviewBtn].forEach((el) => {
+      if (el) el.hidden = isHome;
+    });
   }
 
   function goToSinglePage() {
@@ -2504,8 +2704,7 @@
     if (btn) btn.addEventListener("click", goToSinglePage);
   });
 
-  // Initial render: sidebar chrome, then all three landing cards together.
-  renderSidebarLogo();
-  renderSidebarNav();
+  // Initial render: topbar brand mark, then all three landing cards together.
+  renderTopbarLogo();
   renderSectionGrid();
 })();
