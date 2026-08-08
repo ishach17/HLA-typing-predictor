@@ -184,7 +184,18 @@ body {
   position: relative;
   margin: -32px;
   padding: 32px;
+  min-height: calc(100vh - 56px);
   background: url("hla-main-page-background.png") no-repeat right top / cover;
+}
+
+/* Single Analysis page only — same full-bleed, full-height backdrop
+   treatment as the home page, using its own background image. */
+#view-single {
+  position: relative;
+  margin: -32px;
+  padding: 32px;
+  min-height: calc(100vh - 56px);
+  background: url("hla-stages-upload-background.png") no-repeat right top / cover;
 }
 
 .content-hero-title {
@@ -1752,7 +1763,8 @@ body {
     padding: 20px 16px;
   }
 
-  #view-home {
+  #view-home,
+  #view-single {
     margin: -20px -16px;
     padding: 20px 16px;
   }
