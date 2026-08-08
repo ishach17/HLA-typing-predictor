@@ -188,9 +188,13 @@ body {
   background: url("hla-main-page-background.png") no-repeat right top / cover;
 }
 
-/* Single Analysis page only — same full-bleed, full-height backdrop
-   treatment as the home page, using its own background image. */
-#view-single {
+/* Single Analysis, RPL, Non RPL Control, and Analytics pages — same
+   full-bleed, full-height backdrop treatment as the home page, sharing
+   the "stages" background image. */
+#view-single,
+#view-rpl,
+#view-control,
+#view-analytics {
   position: relative;
   margin: -32px;
   padding: 32px;
@@ -334,6 +338,17 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--brand-radius);
   overflow: hidden;
+}
+
+.section-card-art-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.section-card--clickable:hover .section-card-art-image {
+  transform: scale(1.03);
 }
 
 .section-card-art-icon {
@@ -1764,7 +1779,10 @@ body {
   }
 
   #view-home,
-  #view-single {
+  #view-single,
+  #view-rpl,
+  #view-control,
+  #view-analytics {
     margin: -20px -16px;
     padding: 20px 16px;
   }
