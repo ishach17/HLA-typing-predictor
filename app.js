@@ -289,14 +289,6 @@
     return alleles;
   }
 
-  function dashAlleles() {
-    const alleles = {};
-    ALLELE_FIELD_KEYS.forEach((k) => {
-      alleles[k] = "-";
-    });
-    return alleles;
-  }
-
   // Some PDFs split a single word across separate text runs whose
   // x-positions look adjacent, which extractLinesFromPdf() then joins with
   // a literal space — producing artifacts like "Fem ale", "D P B1", or
@@ -374,8 +366,24 @@
   const TITLE_REGEX = /(Mrs\.|Mr\.|Ms\.|Miss|Dr\.|Master)/g;
   const TITLE_TEST = new RegExp(TITLE_REGEX.source, "i");
 
-  function parseRplReport(lines) {
+  function parseRplReport(rawLines) {
     const warnings = [];
+
+    // Trim off the Remarks/footer section entirely, rather than trying to
+    // filter it out line-by-line. Its free-text prose (e.g. "...HLA-
+    // DPB1*10:01:01+HLA-DPB1*1266:01... is also equally possible", or a
+    // second combination mentioning HLA-DRB1) routinely wraps across
+    // several PDF-extracted lines, and only the first one actually
+    // contains the word "Remarks" — the continuation lines still mention
+    // a real locus name and were getting mistaken for genotype-table rows,
+    // contaminating that locus with garbage allele values (and, worse,
+    // blocking the shared-header/numbered-rows fallback from ever running,
+    // since it only kicks in once every locus is confirmed empty). Name,
+    // gender, age, and the genotype table itself always appear earlier in
+    // the document than Remarks in every report layout seen so far, so
+    // cutting the line list off there is safe.
+    const remarksIdx = rawLines.findIndex((l) => /\bremarks?\s*:/i.test(l));
+    const lines = remarksIdx === -1 ? rawLines : rawLines.slice(0, remarksIdx);
 
     // Match Female/Male regardless of whether the age number comes before or
     // after it ("Female / 24 Years" vs "33 Years/Female"), and regardless of
@@ -416,19 +424,38 @@
     if (nameCandidates.length) {
       for (const candidate of nameCandidates) {
         const stripped = candidate.replace(/^.*?\bname\s*/i, "");
-        const titleIdxs = [...stripped.matchAll(TITLE_REGEX)]
-          .filter((m) => !isGuardianTitle(stripped, m.index))
-          .map((m) => m.index);
+        const titleMatches = [...stripped.matchAll(TITLE_REGEX)].filter((m) => !isGuardianTitle(stripped, m.index));
+        // Some templates address a patient with two stacked titles — a
+        // marital title plus a professional one, e.g. "Mrs. Dr.Praveena R
+        // P" — with nothing but whitespace between them. Each title on its
+        // own looks like a new person's name starting, so two titles for
+        // one person were inflating a 2-person report into 4 "people" and
+        // picking the bare title ("Mrs.") as the name. A title glued to the
+        // one right before it isn't a new person — only the first title in
+        // such a cluster marks where that person's segment actually starts.
+        const titleIdxs = [];
+        for (let i = 0; i < titleMatches.length; i++) {
+          const prev = titleMatches[i - 1];
+          if (prev) {
+            const between = stripped.slice(prev.index + prev[0].length, titleMatches[i].index);
+            if (/^\s*$/.test(between)) continue;
+          }
+          titleIdxs.push(titleMatches[i].index);
+        }
         const candidateNames = [];
         for (let i = 0; i < titleIdxs.length; i++) {
           const start = titleIdxs[i];
           const end = i + 1 < titleIdxs.length ? titleIdxs[i + 1] : stripped.length;
           // Trim off any relationship reference (and whatever guardian
-          // name/title follows it), or a trailing "PIN : ..." patient-ID
-          // field sharing the same line (e.g. "Mrs. Kalpana PIN :
-          // AND23020037156") — neither belongs in the name itself.
+          // name/title follows it), a trailing "PIN : ..." patient-ID field
+          // sharing the same line (e.g. "Mrs. Kalpana PIN :
+          // AND23020037156"), or a parenthesized reference/ID some
+          // templates print right after the name itself — either bare
+          // digits ("Dr.Padmalakshmi (900042417)") or a mixed reference
+          // code ("Mrs. Jayasree ( UMR 2510032612)") — none of these belong
+          // in the name itself.
           let segment = stripped.slice(start, end);
-          const stopMatch = segment.match(/\s+(?:S\/O|D\/O|W\/O|C\/O|PIN)\b/i);
+          const stopMatch = segment.match(/\s+(?:S\/O|D\/O|W\/O|C\/O|PIN)\b|\s*\([^()]*\d[^()]*\)/i);
           if (stopMatch) segment = segment.slice(0, stopMatch.index);
           candidateNames.push(segment.trim());
         }
@@ -476,9 +503,16 @@
       const key = locus.replace("HLA-", "");
       // Allow a stray space anywhere inside the label, not just around the
       // dash — some PDFs split individual letters into separate text runs
-      // (e.g. "HLA - A*", or "D P B1*" for DPB1).
+      // (e.g. "HLA - A*", or "D P B1*" for DPB1). Excludes a "Remarks:"
+      // line even if it happens to mention this same locus (e.g. a note
+      // about alternative/ambiguous allele combinations) — that's
+      // commentary, not the genotype table, and picking it up as a
+      // candidate contaminates that locus with garbage tokens and (worse)
+      // blocks the shared-header/numbered-rows fallback below from ever
+      // running, since it only kicks in once every locus is confirmed
+      // still empty.
       const locusLineRegex = new RegExp(withStrayGaps(locus) + "\\s*\\*", "i");
-      const locusCandidates = lines.filter((l) => locusLineRegex.test(l));
+      const locusCandidates = lines.filter((l) => locusLineRegex.test(l) && !/\bremarks?\b/i.test(l));
       if (!locusCandidates.length) {
         alleleWarnings.push({ field: key, type: "missing", message: `Could not find ${locus} row.` });
         continue;
@@ -675,172 +709,9 @@
     return matches;
   }
 
-  // ---- Control/transplant parsing (Patient + Donor, no gender filtering) ----
-  // Anchors each field to its own label/marker, independent of a single
-  // split point, so it works whether a template stacks two whole
-  // single-person blocks in sequence or shares a two-column header up top
-  // followed by two separately-marked allele tables.
-
-  const FLEXIBLE_TITLE_REGEX = /(Mrs\s*\.|Mr\s*\.|Ms\s*\.|Miss|Dr\s*\.|Master)/g;
-  const FLEXIBLE_GENDER_REGEX = /F\s*e\s*m\s*a\s*l\s*e|M\s*a\s*l\s*e/gi;
-  const NAME_STOP_WORDS = /\s+(?:PIN|Sample\s*Number|Gender|Age|Specimen|Hospital|Diagnosis|Relationship|Relation|Referred|Patient|Donor)\b/i;
-
-  function normalizeGenderMatch(raw) {
-    return /^f/i.test(raw.trim()) ? "Female" : "Male";
-  }
-
-  // Extracts a name from one single line already known to contain "name" —
-  // deliberately never falls back to a neighboring line, since real-world
-  // templates keep the label and value on the same line.
-  function extractNameFromLine(line) {
-    if (!line) return "";
-    const afterLabel = line.replace(/^.*?\bname\s*:?\s*/i, "");
-    const titleIdxs = [...afterLabel.matchAll(FLEXIBLE_TITLE_REGEX)].map((m) => m.index);
-    const startFrom = titleIdxs.length ? afterLabel.slice(titleIdxs[0]) : afterLabel;
-    const stopMatch = startFrom.match(NAME_STOP_WORDS);
-    return (stopMatch ? startFrom.slice(0, stopMatch.index) : startFrom).trim();
-  }
-
-  // Gender/Age: usually one person per line, attributed by position
-  // relative to the Donor boundary — but some templates put both people's
-  // Gender/Age on one shared line, detected by that line having 2 matches.
-  function extractGenderAge(lines, donorLineIdx) {
-    let patientGender = "";
-    let donorGender = "";
-    let patientAge = "";
-    let donorAge = "";
-    lines.forEach((l, i) => {
-      if (!/gender/i.test(l)) return;
-      const genderMatches = [...l.matchAll(FLEXIBLE_GENDER_REGEX)].map((m) => normalizeGenderMatch(m[0]));
-      const ageMatches = [...l.matchAll(/(\d(?:\s?\d){0,2})\s*Years?\b/gi)].map((m) => m[1].replace(/\s/g, ""));
-      if (genderMatches.length >= 2) {
-        if (!patientGender) patientGender = genderMatches[0];
-        if (!donorGender) donorGender = genderMatches[1];
-        if (!patientAge && ageMatches.length) patientAge = ageMatches[0];
-        if (!donorAge && ageMatches.length > 1) donorAge = ageMatches[1];
-      } else if (genderMatches.length === 1) {
-        const belongsToDonor = donorLineIdx !== -1 && i >= donorLineIdx;
-        if (belongsToDonor) {
-          if (!donorGender) donorGender = genderMatches[0];
-          if (!donorAge && ageMatches.length) donorAge = ageMatches[0];
-        } else {
-          if (!patientGender) patientGender = genderMatches[0];
-          if (!patientAge && ageMatches.length) patientAge = ageMatches[0];
-        }
-      }
-    });
-    return { patientGender, donorGender, patientAge, donorAge };
-  }
-
-  // HLA table: finds the first two lines (from startIdx onward) with
-  // exactly 6 allele-shaped tokens, regardless of whatever row-index text
-  // precedes them — the token count alone identifies a valid row.
-  function findAlleleRowsAfter(lines, startIdx) {
-    let row1 = null;
-    let row2 = null;
-    for (let i = startIdx; i < lines.length; i++) {
-      const tokens = [...lines[i].matchAll(/\d{2}:\d{2}(?::\d{2})?/g)].map((m) => m[0]);
-      if (tokens.length !== LOCI.length) continue;
-      if (!row1) row1 = tokens;
-      else {
-        row2 = tokens;
-        break;
-      }
-    }
-    return row1 && row2 ? [row1, row2] : null;
-  }
-
-  function alleleObjFromRows(rows) {
-    if (!rows) return null;
-    const alleles = emptyAlleles();
-    LOCUS_KEYS.forEach((key, i) => {
-      alleles[`${key}/1`] = rows[0][i] || "";
-      alleles[`${key}/2`] = rows[1][i] || "";
-    });
-    return alleles;
-  }
-
-  function parseControlReport(rawLines) {
-    // Row-clustering occasionally pulls the Patient's and Donor's "name"
-    // fields onto the same reconstructed line when a template renders them
-    // close together vertically. Split that single line right at the
-    // "Donor name :" boundary before anything else runs.
-    const lines = rawLines.flatMap((l) => {
-      const m = l.match(/^(.*\S)\s+(Donor\s*name\s*:.*)$/i);
-      return m ? [m[1], m[2]] : [l];
-    });
-
-    const donorLineIdx = lines.findIndex((l) => /\bdonor\b/i.test(l) && /\bname\b/i.test(l));
-    const donorMentioned = donorLineIdx !== -1;
-
-    const patientNameLine = lines.find((l) => /\bname\b/i.test(l) && !/\bdonor\b/i.test(l)) || "";
-    const donorNameLine = donorMentioned ? lines[donorLineIdx] : "";
-    const patientName = extractNameFromLine(patientNameLine);
-    const donorName = donorMentioned ? extractNameFromLine(donorNameLine) : "";
-
-    const ga = extractGenderAge(lines, donorLineIdx);
-
-    // Prefer an explicit "<Name> (Patient)" / "<Name> (Donor)" marker line
-    // directly above that person's own allele table when the template
-    // repeats one there; otherwise fall back to whichever half of the
-    // document holds the first two valid-shaped rows.
-    const patientMarkerIdx = lines.findIndex((l) => /\(patient\)/i.test(l));
-    const donorMarkerIdx = lines.findIndex((l) => /\(donor\)/i.test(l));
-
-    let patientRows = patientMarkerIdx !== -1 ? findAlleleRowsAfter(lines, patientMarkerIdx + 1) : null;
-    let donorRows = donorMentioned && donorMarkerIdx !== -1 ? findAlleleRowsAfter(lines, donorMarkerIdx + 1) : null;
-
-    if (!patientRows) {
-      const blockEnd = donorMentioned ? donorLineIdx : lines.length;
-      patientRows = findAlleleRowsAfter(lines.slice(0, blockEnd), 0);
-    }
-    if (donorMentioned && !donorRows) {
-      donorRows = findAlleleRowsAfter(lines, donorLineIdx);
-    }
-
-    const patientWarnings = [];
-    if (!patientName) patientWarnings.push({ field: "name", type: "missing", message: 'Could not find a "Name" line for the Patient.' });
-    if (!ga.patientGender) patientWarnings.push({ field: "gender", type: "missing", message: 'Could not find a "Gender" line for the Patient.' });
-    if (!ga.patientAge) patientWarnings.push({ field: "age", type: "missing", message: 'Could not find an "Age" line for the Patient.' });
-    if (!patientRows) patientWarnings.push({ field: null, type: "missing", message: "Could not find the HLA allele table for the Patient — please verify manually." });
-
-    const patient = {
-      name: patientName,
-      gender: ga.patientGender,
-      age: ga.patientAge,
-      role: "Patient",
-      alleles: alleleObjFromRows(patientRows) || emptyAlleles(),
-      warnings: patientWarnings,
-    };
-
-    let donor;
-    if (!donorMentioned) {
-      donor = {
-        name: "-",
-        gender: "-",
-        age: "-",
-        role: "Donor",
-        alleles: dashAlleles(),
-        warnings: [{ field: null, type: "donor-absent", message: "Donor not mentioned in this report" }],
-      };
-    } else {
-      const donorWarnings = [];
-      if (!donorName) donorWarnings.push({ field: "name", type: "missing", message: 'Could not find a "Name" line for the Donor.' });
-      if (!ga.donorGender) donorWarnings.push({ field: "gender", type: "missing", message: 'Could not find a "Gender" line for the Donor.' });
-      if (!ga.donorAge) donorWarnings.push({ field: "age", type: "missing", message: 'Could not find an "Age" line for the Donor.' });
-      if (!donorRows) donorWarnings.push({ field: null, type: "missing", message: "Could not find the HLA allele table for the Donor — please verify manually." });
-      donor = {
-        name: donorName,
-        gender: ga.donorGender,
-        age: ga.donorAge,
-        role: "Donor",
-        alleles: alleleObjFromRows(donorRows) || emptyAlleles(),
-        warnings: donorWarnings,
-      };
-    }
-
-    return { patient, donor };
-  }
+  // Control reports are single-patient reports, same shape as RPL's — no
+  // Patient+Donor split. Control's PDF path reuses processRplPdfFile()
+  // below directly instead of a separate parser (see renderControlUploadArea).
 
   // ---- PDF file processing per card ----
 
@@ -860,27 +731,6 @@
       people: [{ values, fieldKeys, warnings: parsed.warnings }],
       sampleNumber: extractSampleNumber(lines),
       rawLines: lines.join("\n"),
-    };
-  }
-
-  async function processControlPdfFile(file) {
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    const lines = await extractLinesFromPdf(pdf);
-    const parsed = parseControlReport(lines);
-    const fieldKeys = ["name", "gender", "age", "role", ...ALLELE_FIELD_KEYS];
-    const toValues = (person) => [
-      person.name,
-      person.gender,
-      person.age,
-      person.role,
-      ...ALLELE_FIELD_KEYS.map((k) => person.alleles[k]),
-    ];
-    return {
-      people: [
-        { values: toValues(parsed.patient), fieldKeys, warnings: parsed.patient.warnings },
-        { values: toValues(parsed.donor), fieldKeys, warnings: parsed.donor.warnings },
-      ],
     };
   }
 
@@ -1064,13 +914,9 @@
 
     const tbody = document.createElement("tbody");
     patients.forEach((patient) => {
-      // Sample number rides along in parentheses when there's a real name
-      // to attach it to — otherwise it's the only identifier available and
-      // stands in for the name outright, same as before.
-      const nameLabel =
-        patient.name && patient.sampleNumber
-          ? `${patient.name} (${patient.sampleNumber})`
-          : patient.name || patient.sampleNumber || "—";
+      // Sample number is only shown when there's no real name to fall back
+      // on — appending it after a real name read as clutter.
+      const nameLabel = patient.name || patient.sampleNumber || "—";
       const ageLabel = patient.age || "—";
       const matches = compareToReference(patient.alleles, RPL_REFERENCE_DATA);
 
@@ -2574,7 +2420,7 @@
   }
 
   const RPL_COLUMNS = ["Patient Name", "Gender", "Age", ...ALLELE_FIELD_KEYS];
-  const CONTROL_COLUMNS = ["Name", "Gender", "Age", "Role", ...ALLELE_FIELD_KEYS];
+  const CONTROL_COLUMNS = ["Name", "Gender", "Age", ...ALLELE_FIELD_KEYS];
 
   let rplAreaRendered = false;
   let controlAreaRendered = false;
@@ -2603,13 +2449,10 @@
     rplAreaRendered = true;
   }
 
-  // Control's two upload modes behave differently from each other: a
-  // Control PDF still carries a Patient + Donor (no reference-dataset
-  // meaning for a Donor's alleles, so compareReferencePdf is off — that
-  // card just shows the extracted rows), but a Control Excel sheet is a
-  // single-patient, Name/Age/allele-columns sheet — the same shape RPL's
-  // Excel path already reads — so compareReferenceExcel is on, matching
-  // RPL's Excel behavior exactly (reference comparison + Export All).
+  // Control reports are single-patient, same shape as RPL — no Patient +
+  // Donor. Both its PDF and Excel paths reuse RPL's own processor and get
+  // the same reference comparison (classification + Export All); only the
+  // label/heading/export filename differ from RPL's card.
   function renderControlUploadArea() {
     if (controlAreaRendered) return;
     const breadcrumbUploadFiles = document.getElementById("breadcrumb-upload-files-control");
@@ -2617,8 +2460,8 @@
       label: "Add Control Report",
       icon: ICONS.control,
       columns: CONTROL_COLUMNS,
-      parseFile: processControlPdfFile,
-      compareReferencePdf: false,
+      parseFile: processRplPdfFile,
+      compareReferencePdf: true,
       compareReferenceExcel: true,
       resultsHeading: "Control Analysis Results",
       resultsFileName: "Control_Results.xlsx",
