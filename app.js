@@ -225,7 +225,6 @@
       icon: ICONS.dna,
       heading: "RPL",
       step: "Stage 01",
-      hint: "Recipient paired ligand report",
       ctaLabel: "Get Started",
       onClick: goToRplPage,
     },
@@ -234,7 +233,6 @@
       icon: ICONS.control,
       heading: "Non RPL Control",
       step: "Stage 02",
-      hint: "Matched control report",
       ctaLabel: "Get Started",
       onClick: goToControlPage,
     },
@@ -243,7 +241,6 @@
       icon: ICONS.analytics,
       heading: "Analytics",
       step: "Stage 03",
-      hint: "Resolved allele analytics",
       ctaLabel: "Get Started",
       onClick: goToAnalyticsPage,
     },
@@ -2662,10 +2659,12 @@
     topbarPageTitle.textContent = PAGE_TITLES[view.id] || "";
 
     // No side panel — the brand mark stays put in the topbar on every page.
-    // Only the "Instrument / <page>" breadcrumb and the Overview button
-    // (back to the home overview) are specific to non-home pages.
+    // The "Instrument / <page>" breadcrumb and the Overview button (back to
+    // the home overview) are specific to non-home pages; home shows just
+    // the brand mark alone, with no redundant page-title crumb next to it
+    // (the page's own H1 already says "Analysis Selection" below).
     const isHome = view === viewHome;
-    [topbarInstrument, topbarSep, topbarOverviewBtn].forEach((el) => {
+    [topbarInstrument, topbarSep, topbarOverviewBtn, topbarPageTitle].forEach((el) => {
       if (el) el.hidden = isHome;
     });
   }
