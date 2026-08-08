@@ -112,7 +112,6 @@
     {
       key: "single",
       icon: ICONS.dna,
-      badgeIcon: ICONS.circleDot,
       art: "hla-hero-illustration.png",
       heading: "Single Analysis",
       description: "Upload RPL and Control reports for individual HLA analysis.",
@@ -123,7 +122,6 @@
     {
       key: "couple",
       icon: ICONS.users,
-      badgeIcon: ICONS.users,
       art: "hla-couple-illustration.png",
       heading: "Couple Analysis",
       description: "Compare HLA allele patterns between two individuals and their studied associations.",
@@ -133,7 +131,6 @@
     {
       key: "kir",
       icon: ICONS.circleDot,
-      badgeIcon: ICONS.circleDot,
       art: "hla-kir-illustration.png",
       heading: "KIR Analysis",
       description: "Analyze KIR gene patterns and their studied associations with HLA ligands.",
@@ -142,7 +139,7 @@
     },
   ];
 
-  function renderSectionCard({ key, icon, badgeIcon, art, heading, description, ctaLabel, onClick, banner, step, hint }) {
+  function renderSectionCard({ key, icon, art, heading, description, ctaLabel, onClick, banner, step, hint }) {
     const card = document.createElement("div");
     card.className = `section-card section-card--${key}${onClick ? " section-card--clickable" : ""}${banner ? " section-card--banner" : ""}`;
     if (onClick) {
@@ -159,11 +156,11 @@
     const stepHtml = step ? `<span class="section-card-step">${step}</span>` : "";
 
     // Banner cards (home page): a top accent rule spanning the full card
-    // width, an inset "art" tile (the section's illustration image, or the
-    // icon enlarged as a fallback if none is given), and a round icon
-    // badge. Non-banner cards (Single Analysis sub-cards): a short accent
-    // tick in the top-right corner instead, and a square icon box paired
-    // with the stage label on the same row.
+    // width and a larger inset "art" tile (the section's illustration
+    // image, or the icon enlarged as a fallback if none is given) — no
+    // round icon badge underneath. Non-banner cards (Single Analysis
+    // sub-cards): a short accent tick in the top-right corner instead, and
+    // a square icon box paired with the stage label on the same row.
     const topRuleHtml = banner
       ? `<span class="section-card-top-rule"></span>`
       : `<span class="section-card-corner-rule"></span>`;
@@ -177,7 +174,6 @@
         <div class="section-card-art">
           ${artContentHtml}
         </div>
-        <span class="section-card-icon-circle">${badgeIcon}</span>
       `
       : `
         <div class="section-card-icon-row">
